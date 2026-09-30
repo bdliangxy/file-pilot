@@ -14,16 +14,15 @@ import {
 
 // Remember to rename these classes and interfaces!
 
-export default class MyPlugin extends Plugin {
+export default class HelloWorldPlugin extends Plugin {
 	settings!: MyPluginSettings;
 
 	async onload() {
 		await this.loadSettings();
 
 		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+		this.addRibbonIcon('dice', 'Greet', () => {
+			new Notice('Hello, world!');
 		});
 
 		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
@@ -81,12 +80,10 @@ export default class MyPlugin extends Plugin {
 		});
 
 		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
-		);
+
 	}
 
-	onunload() {}
+	onunload() { }
 
 	async loadSettings() {
 		this.settings = Object.assign(

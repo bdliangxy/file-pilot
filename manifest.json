@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
-	"isDesktopOnly": false
+	"id": "file-pilot",
+	"name": "File Pilot",
+	"version": "0.0.1",
+	"minAppVersion": "1.13.7",
+	"description": "Manage external files through linked Obsidian notes, with metadata, tags, relationships, and assisted organization.",
+	"author": "bdliangxy",
+	"authorUrl": "https://github.com/bdliangxy",
+	"isDesktopOnly": true
 }

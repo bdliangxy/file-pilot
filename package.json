@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"name": "file-pilot",
+	"version": "0.0.1",
+	"description": "Manage external files through linked Obsidian notes, with metadata, tags, relationships, and assisted organization.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
