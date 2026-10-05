@@ -23,3 +23,6 @@ data.json
 
 # AI-Related Documents
 AGENTS.md
+
+# Local external-file test fixture
+tests/ob-external-files
