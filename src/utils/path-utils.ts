@@ -1,0 +1,58 @@
+import path from 'node:path';
+export function unifyPathFormat(filePath: string): string {
+	return filePath.replaceAll('\\', '/');
+}
+
+export function getRelativeFilePath(
+	rootPath: string,
+	absolutePath: string,
+): string {
+	return unifyPathFormat(
+		path.relative(rootPath, absolutePath),
+	);
+}
+
+export function getAbsoluteFilePath(
+	rootPath: string,
+	filePath: string,
+): string {
+	return path.join(rootPath, filePath);
+}
+
+export function getFileExtension(
+	filePath: string,
+): string | null {
+	const extension = path.extname(filePath);
+
+	return extension === ''
+		? null
+		: extension.slice(1);
+}
+
+export function getFileBaseName(
+	filePath: string,
+): string {
+	const extension = path.extname(filePath);
+
+	return path.basename(
+		filePath,
+		extension,
+	);
+}
+
+export function getShadowNoteFileName(
+	relativePath: string,
+	parentCount: number,
+): string | null {
+	const parts = relativePath.split('/');
+
+	if (parentCount >= parts.length) {
+		return null;
+	}
+
+	const name = parts
+		.slice(-(parentCount + 1))
+		.join('_');
+
+	return `${name}.md`;
+}

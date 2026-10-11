@@ -19,7 +19,8 @@ export interface DataAdapter {
 
 export class DataStore {
 	constructor(private readonly dataAdapter: DataAdapter) { }
-
+	// If the data meets the requirements after running load(),
+	// return the loaded data; otherwise, load the default value.
 	async load(): Promise<Data> {
 		const storedData = await this.dataAdapter.loadData();
 		if (isData(storedData)) {

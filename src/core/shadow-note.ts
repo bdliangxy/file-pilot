@@ -1,5 +1,8 @@
 import { App, TFile } from "obsidian";
 import type { FileRecord } from "./file-interface";
+import { getShadowNoteFileName } from "../utils/path-utils";
+
+
 
 export class ShadowNoteService {
 	constructor(private app: App) { }
@@ -9,6 +12,60 @@ export class ShadowNoteService {
 	): TFile | null {
 		return this.app.vault.getFileByPath(
 			fileRecord.shadowNotePath
+		);
+	}
+
+	getAvailableShadowNotePath(
+		relativePath: string,
+		parentCount = 0,
+	): string {
+		const fileName = getShadowNoteFileName(
+			relativePath,
+			parentCount,
+		);
+
+		if (fileName === null) {
+			throw new Error(
+				`无法为 ${relativePath} 分配 Shadow Note 路径：所有候选名称均已被占用`,
+			);
+		}
+
+		const candidatePath = `ShadowNotes/${fileName}`;
+
+		if (
+			this.app.vault.getAbstractFileByPath(
+				candidatePath,
+			) === null
+		) {
+			return candidatePath;
+		}
+
+		return this.getAvailableShadowNotePath(
+			relativePath,
+			parentCount + 1,
+		);
+	}
+
+	async createShadowNote(
+		shadowNotePath: string,
+		fileId: string,
+	): Promise<void> {
+		if (
+			this.app.vault.getFolderByPath(
+				'ShadowNotes',
+			) === null
+		) {
+			await this.app.vault.createFolder(
+				'ShadowNotes',
+			);
+		}
+
+		const content =
+			`---\nfile-id: ${fileId}\n---\n`;
+
+		await this.app.vault.create(
+			shadowNotePath,
+			content,
 		);
 	}
 }

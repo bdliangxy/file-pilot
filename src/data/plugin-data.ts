@@ -1,7 +1,7 @@
 import type { FileRecord } from "../core/file-interface"
 
 export interface PluginData {
-	version: number; // data.json 数据结构版本，用于未来升级后的数据兼容
+	version: number; // Schema version of data.json for compatibility with future upgrades.
 	fileRecords: FileRecord[];
 }
 

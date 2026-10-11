@@ -1,23 +1,26 @@
-export interface FileRecord {
-	id: string;	//插件内部稳定主键，用于内部引用；
-
-	path: string; //这里写相对于FileScope的相对路径
-
-	nativeIdentity?: string; //文件系统提供的辅助识别信息
-
-	baseName: string; //文件名，不包含路径和扩展名
-	extension: string | null; //文件扩展名，不包含点号
-
-	size: number; //文件大小，以字节为单位
-	mtimeMs: number; //文件修改时间，以毫秒为单位
-
-	shadowNotePath: string; //相对于 Vault 根目录的路径
-}
-
 export interface FileScope {
-	rootPath: string;	//管理哪个真实文件夹
+	rootPath: string;	// Physical directory managed by this scope.
 
-	ignorePatterns: string[]; //用 ignore 排除不需要的内容
+	ignorePatterns: string[]; // Ignore patterns used to exclude unwanted content.
 
-	watchEnabled: boolean; //如果当前文件夹中文件操作比较频繁，用户可以暂时关闭实时监听，文件操作结束后再开启
+	watchEnabled: boolean; // Users can temporarily disable live watching during frequent file operations and re-enable it afterward.
 }
+
+export interface ScannedFileInfo {
+	path: string; // Path relative to the FileScope root.
+	nativeIdentity?: string; // Auxiliary identity information provided by the file system.
+	baseName: string; // File name without the path or extension.
+	extension: string | null; // File extension without the leading dot.
+	size: number; // File size in bytes.
+	mtimeMs: number; // File modification time in milliseconds.
+}
+
+export type FileStatus = 'available' | 'missing';
+
+export interface FileRecord extends ScannedFileInfo {
+	id: string;	// Stable primary key used for internal plugin references.
+	status: FileStatus;
+	shadowNotePath: string; // Path relative to the vault root.
+}
+
+
