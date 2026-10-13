@@ -1,6 +1,3 @@
-import { stat } from 'node:fs/promises';
-import { isAbsolute } from 'node:path';
-
 import {
 	App,
 	Notice,
@@ -10,6 +7,11 @@ import {
 } from 'obsidian';
 
 import type FilePilotPlugin from '../main';
+import {
+	ScanRootLockedError,
+	ScanRootInvalidError,
+	ScanRootNotFoundError
+} from '../data/plugin-state-service';
 import { t } from '../i18n';
 import { pickFolder } from './folder-picker';
 
@@ -28,26 +30,26 @@ export class FilePilotSettingTab extends PluginSettingTab {
 				desc: t('scanRootDesc'),
 
 				render: (setting: Setting) => {
-					const fileScope = this.filePilot.pluginSettings.fileScope;
 
 					let pathInput: TextComponent;
 
 					setting
 						.addText((text) => {
+							text.inputEl.addClass('file-pilot-path-input');
 							pathInput = text;
 
 							text
 								.setPlaceholder(t('scanRootPlaceholder'))
-								.setValue(fileScope.rootPath);
+								.setValue(this.filePilot.stateService.getRootPath());
 							text.inputEl.addEventListener('keydown', (event) => {
 								if (event.key !== 'Enter' || event.isComposing) {
 									return;
 								}
 
 								event.preventDefault();
-								void this.saveRootPath(text.getValue()).then(() => {
+								void this.handleRootPathChange(text.getValue()).then(() => {
 									text.setValue(
-										fileScope.rootPath
+										this.filePilot.stateService.getRootPath(),
 									);
 								});
 
@@ -57,19 +59,24 @@ export class FilePilotSettingTab extends PluginSettingTab {
 							button
 								.setButtonText(t('scanRootBrowse'))
 								.onClick(async () => {
+									let selectedPath: string | undefined;
 									try {
-										const selectedPath =
-											await pickFolder(fileScope.rootPath);
-
-										if (selectedPath === undefined) {
-											return;
-										}
-										await this.saveRootPath(selectedPath);
-										pathInput.setValue(fileScope.rootPath);
-
+										selectedPath = await pickFolder(
+											this.filePilot.stateService.getRootPath()
+										);
 									} catch {
 										new Notice(t('scanRootBrowseFailed'));
+										return;
 									}
+
+									if (selectedPath === undefined) {
+										return;
+									}
+
+									await this.handleRootPathChange(selectedPath);
+									pathInput.setValue(
+										this.filePilot.stateService.getRootPath(),
+									);
 								});
 						});
 				},
@@ -77,46 +84,20 @@ export class FilePilotSettingTab extends PluginSettingTab {
 		];
 	}
 
-	private async saveRootPath(value: string): Promise<void> {
-		const newPath = value.trim();
-		const oldPath =
-			this.filePilot.pluginSettings.fileScope.rootPath;
-
-		if (newPath !== '' && !isAbsolute(newPath)) {
-			new Notice(t('scanRootInvalid'));
-			return;
-		}
-
-		if (newPath !== '') {
-			try {
-				const info = await stat(newPath);
-
-				if (!info.isDirectory()) {
-					new Notice(t('scanRootNotFound'));
-					return;
-				}
-			} catch {
-				new Notice(t('scanRootNotFound'));
-				return;
-			}
-		}
-
-		if (
-			newPath !== oldPath &&
-			this.filePilot.pluginData.fileRecords.length > 0
-		) {
-			new Notice(t('scanRootLocked'));
-			return;
-		}
-
-		this.filePilot.pluginSettings.fileScope.rootPath = newPath;
-
+	private async handleRootPathChange(value: string): Promise<void> {
 		try {
-			await this.filePilot.saveAllData();
+			await this.filePilot.stateService.setRootPath(value);
 			new Notice(t('scanRootSaved'));
-		} catch {
-			this.filePilot.pluginSettings.fileScope.rootPath = oldPath;
-			new Notice(t('scanRootSaveFailed'));
+		} catch (error) {
+			if (error instanceof ScanRootLockedError) {
+				new Notice(t('scanRootLocked'));
+			} else if (error instanceof ScanRootInvalidError) {
+				new Notice(t('scanRootInvalid'));
+			} else if (error instanceof ScanRootNotFoundError) {
+				new Notice(t('scanRootNotFound'));
+			} else {
+				new Notice(t('scanRootSaveFailed'));
+			}
 		}
 	}
 }

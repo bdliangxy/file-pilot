@@ -1,12 +1,14 @@
 import type { en } from './en';
-
+const pluginName = 'File Pilot'
 export const zh = {
-	pluginLoaded: 'File Pilot 已加载',
-	fileCount: '{count} 个文件',
+	pluginTitle: pluginName,
+	pluginLoaded: `${pluginName} 已加载`,
+	filePilotRibbonTooltip: `打开${pluginName}监控面板`,
 
-	scanRootName: '扫描根目录',
-	scanRootDesc: 'File Pilot 管理的本地文件夹，包括其子文件夹。',
-	scanRootPlaceholder: '输入文件夹的绝对路径',
+
+	scanRootName: '项目文件夹',
+	scanRootDesc: `${pluginName}管理的本地文件夹`,
+	scanRootPlaceholder: '输入文件夹的绝对路径，按回车确认',
 	scanRootBrowse: '浏览',
 	scanRootSave: '保存',
 	scanRootSelect: '选择扫描目录',
@@ -17,4 +19,10 @@ export const zh = {
 	scanRootLocked: '已有文件记录，暂不支持修改扫描根目录',
 	scanRootSaveFailed: '保存扫描目录失败',
 	scanRootBrowseFailed: '无法打开文件夹选择窗口，请手动输入路径',
+
+	oneWayScan: '单向扫描',
+	scanRootNotConfigured: '请先在插件设置页添加文件夹',
+	scanCompleted: '已导入 {count} 个文件',
+	scanFailed: '扫描失败',
+	scanning: '扫描文件夹中',
 } satisfies Record<keyof typeof en, string>;

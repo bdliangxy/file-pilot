@@ -1,45 +1,87 @@
 import { Plugin } from 'obsidian';
-import { DataStore } from './data/data-store';
-import type { PluginData } from './data/plugin-data';
-import type { PluginSettings } from './data/settings/plugin-settings';
+import { PluginStateService } from './data/plugin-state-service';
 import { logger } from './utils/logger';
 import { FilePilotSettingTab } from './ui/file-pilot-setting-tab';
+import { t } from './i18n/index';
+import { FileScanner } from './core/file-scanner';
+import { ShadowNoteService } from './core/shadow-note';
+import { FilePilotView, VIEW_TYPE } from './ui/file-pilot-view';
+import { FileSyncService } from './core/file-sync';
+import type { SyncResult } from './core/file-sync';
 
 export default class FilePilotPlugin extends Plugin {
-	pluginSettings!: PluginSettings;
-	pluginData!: PluginData;
-
-	private dataStore!: DataStore;
+	//he state service owns and persists all plugin data.
+	public readonly stateService = new PluginStateService({
+		loadData: () => this.loadData(),
+		saveData: (data) => this.saveData(data),
+	});
+	private fileSyncService!: FileSyncService;
 
 
 	async onload(): Promise<void> {
-		//When constructing a datastore, you need to pass in a DataAdapter.
-		this.dataStore = new DataStore({
-			loadData: () => this.loadData(),
-			saveData: (data) => this.saveData(data),
-		});
 
-		const data = await this.dataStore.load();
-		this.pluginSettings = data.pluginSettings;
-		this.pluginData = data.pluginData;
+		// Load persisted plugin data.
+		await this.stateService.load();
 
+		// Initialize file synchronization.
+		this.fileSyncService = new FileSyncService(
+			new FileScanner(),
+			new ShadowNoteService(this.app),
+			(records) => this.stateService.addFileRecords(records),
+		);
+
+		// Register settings.
 		this.addSettingTab(
 			new FilePilotSettingTab(this.app, this),
 		);
 
+		// Register the File Pilot view.
+		this.registerView(
+			VIEW_TYPE,
+			(leaf) => new FilePilotView(leaf, this),
+		);
+
+		// Add the ribbon icon.
+		this.addRibbonIcon(
+			'spline-pointer',
+			t('filePilotRibbonTooltip'),
+			() => {
+				void this.activateFilePilotView();
+			},
+		);
+
 		logger.debug('Plugin loaded', {
-			fileRecordCount: this.pluginData.fileRecords.length,
+			fileRecordCount: this.stateService.getFileRecordCount(),
 		});
 	}
 
 	onunload(): void {
 		logger.debug('Plugin unloaded');
 	}
+	private async activateFilePilotView(): Promise<void> {
+		const workspace = this.app.workspace;
 
-	async saveAllData() {
-		await this.dataStore.save({
-			pluginSettings: this.pluginSettings,
-			pluginData: this.pluginData,
-		});
+		const existingLeaf =
+			workspace.getLeavesOfType(VIEW_TYPE)[0];
+
+		if (existingLeaf) {
+			await workspace.revealLeaf(existingLeaf);
+			return;
+		}
+		await workspace.ensureSideLeaf(
+			VIEW_TYPE,
+			'right',
+			{
+				active: true,
+				reveal: true,
+			},
+		);
 	}
+
+	async syncFiles(): Promise<SyncResult> {
+		return this.fileSyncService.syncFiles(
+			this.stateService.getFileScope(),
+		);
+	}
+
 }

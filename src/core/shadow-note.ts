@@ -26,7 +26,9 @@ export class ShadowNoteService {
 
 		if (fileName === null) {
 			throw new Error(
-				`无法为 ${relativePath} 分配 Shadow Note 路径：所有候选名称均已被占用`,
+				`Unable to assign a Shadow Note path for ${relativePath}: all candidate names are already taken.
+
+`,
 			);
 		}
 
