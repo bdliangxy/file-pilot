@@ -5,7 +5,7 @@ import type {
 
 import { randomUUID } from 'node:crypto';
 
-import { ShadowNoteService } from './shadow-note';
+import type { ShadowNoteService } from './shadow-note';
 
 function getFallbackShadowNotePath(
 	baseName: string,

@@ -1,19 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
-import { createJiti } from 'jiti';
 
-import { setLanguage } from '../mocks/obsidian.mjs';
+import {
+	createTestJiti,
+	setLanguage,
+} from '../fakes/index.mjs';
 
-const mockPath = fileURLToPath(
-	new URL('../mocks/obsidian.mjs', import.meta.url)
-);
-
-const jiti = createJiti(import.meta.url, {
-	alias: {
-		obsidian: mockPath,
-	},
-});
+const jiti = createTestJiti(import.meta.url);
 const { t } = await jiti.import('../../src/i18n/index.ts');
 
 test('returns English text and interpolates parameters', () => {
