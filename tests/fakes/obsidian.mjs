@@ -7,3 +7,9 @@ export function getLanguage() {
 export function setLanguage(value) {
 	language = value;
 }
+
+export class Notice {
+	constructor(message) {
+		this.message = message;
+	}
+}

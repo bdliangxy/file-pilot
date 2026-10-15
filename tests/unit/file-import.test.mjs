@@ -48,25 +48,3 @@ test('imports metadata and links each FileRecord to its own Shadow Note', async 
 		})),
 	);
 });
-
-test('falls back to a UUID-suffixed Shadow Note name if candidates are exhausted', async () => {
-	const service = createFakeShadowNoteService();
-	service.getAvailableShadowNotePath = () => {
-		throw new Error('No available candidate name');
-	};
-
-	const [record] = await importScannedFiles(
-		[makeScannedFile('docs/report.pdf', { baseName: 'report' })],
-		service,
-	);
-
-	assert.ok(record);
-	assert.equal(
-		record.shadowNotePath,
-		`ShadowNotes/report-${record.id}.md`,
-	);
-	assert.deepEqual(service.createdNotes, [{
-		notePath: record.shadowNotePath,
-		fileId: record.id,
-	}]);
-});

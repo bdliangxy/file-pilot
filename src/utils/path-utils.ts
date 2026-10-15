@@ -50,7 +50,7 @@ export function getShadowNoteFileName(
 	id?: string,
 ): string | null {
 	if (id !== undefined) {
-		return `${getFullName(relativePath)}_${id}.md`;
+		return `${getFullName(relativePath)}-${id}.md`;
 	}
 
 	const parts = relativePath.split('/');
