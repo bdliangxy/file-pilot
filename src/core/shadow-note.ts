@@ -1,7 +1,8 @@
 import { App, TFile } from "obsidian";
 import type { FileRecord } from "./file-interface";
-import { getShadowNoteFileName } from "../utils/path-utils";
-
+import { getShadowNoteFileName, getFullName } from "../utils/path-utils";
+import { Notice } from 'obsidian';
+import { t } from '../i18n';
 
 
 export class ShadowNoteService {
@@ -17,6 +18,7 @@ export class ShadowNoteService {
 
 	getAvailableShadowNotePath(
 		relativePath: string,
+		fileId: string,
 		parentCount = 0,
 	): string {
 		const fileName = getShadowNoteFileName(
@@ -25,11 +27,14 @@ export class ShadowNoteService {
 		);
 
 		if (fileName === null) {
-			throw new Error(
-				`Unable to assign a Shadow Note path for ${relativePath}: all candidate names are already taken.
-
-`,
+			const fallbackName = getShadowNoteFileName(
+				relativePath,
+				parentCount,
+				fileId,
 			);
+			const sameNamefile = getFullName(relativePath);
+			new Notice(t('SameNameFile', { fileName: sameNamefile }));
+			return `ShadowNotes/${fallbackName}`;
 		}
 
 		const candidatePath = `ShadowNotes/${fileName}`;
@@ -44,6 +49,7 @@ export class ShadowNoteService {
 
 		return this.getAvailableShadowNotePath(
 			relativePath,
+			fileId,
 			parentCount + 1,
 		);
 	}

@@ -11,7 +11,7 @@ export function getRelativeFilePath(
 		path.relative(rootPath, absolutePath),
 	);
 }
-
+// filePath format:basename.ext，Path separators do not need to be considered.
 export function getAbsoluteFilePath(
 	rootPath: string,
 	filePath: string,
@@ -40,10 +40,19 @@ export function getFileBaseName(
 	);
 }
 
+export function getFullName(relativePath: string): string {
+	return path.posix.basename(relativePath);
+}
+
 export function getShadowNoteFileName(
 	relativePath: string,
 	parentCount: number,
+	id?: string,
 ): string | null {
+	if (id !== undefined) {
+		return `${getFullName(relativePath)}_${id}.md`;
+	}
+
 	const parts = relativePath.split('/');
 
 	if (parentCount >= parts.length) {
