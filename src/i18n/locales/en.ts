@@ -26,5 +26,6 @@ export const en = {
 	SameNameFile: `The Shadow Note for file {fileName} has a naming conflict. ${pluginName} has appended a UUID to the end. It is strongly recommended that you manually rename the file.`,
 	scanFailed: `Scan failed`,
 	scanning: `scanning folder`,
+	syncAlreadyInProgress: `Sync already in progress`,
 
 } as const;

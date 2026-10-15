@@ -3,6 +3,7 @@ import type { ShadowNoteService } from './shadow-note';
 import { importScannedFiles } from './file-import';
 
 import type { FileScope, FileRecord } from './file-interface';
+import { FilePilotError } from '../error';
 
 export interface SyncResult {
 	importedCount: number;
@@ -21,11 +22,17 @@ export class FileSyncService {
 		fileScope: FileScope,
 	): Promise<SyncResult> {
 		if (this.syncInProgress) {
-			throw new Error('Sync already in progress');
+			throw new FilePilotError(
+				'SYNC_IN_PROGRESS',
+				'Sync already in progress',
+			);
 		}
 
 		if (!fileScope.rootPath.trim()) {
-			throw new Error('Scan root is not configured');
+			throw new FilePilotError(
+				'SCAN_ROOT_NOT_CONFIGURED',
+				'Scan root is not configured',
+			);
 		}
 
 		this.syncInProgress = true;

@@ -3,6 +3,7 @@ import { DEFAULT_PLUGIN_DATA, type PluginData } from './plugin-data';
 import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { FileScope, FileRecord } from '../core/file-interface';
+import { FilePilotError } from '../error';
 // Represents the complete structure stored in Obsidian's data.json.
 interface Data {
 	settingData: SettingData;
@@ -17,27 +18,6 @@ const DEFAULT_DATA: Data = {
 export interface DataAdapter {
 	loadData(): Promise<unknown>;
 	saveData(data: Data): Promise<void>;
-}
-
-export class ScanRootLockedError extends Error {
-	constructor() {
-		super('Scan root cannot be changed after files have been imported');
-		this.name = 'ScanRootLockedError';
-	}
-}
-
-export class ScanRootInvalidError extends Error {
-	constructor() {
-		super('Scan root must be an absolute path');
-		this.name = 'ScanRootInvalidError';
-	}
-}
-
-export class ScanRootNotFoundError extends Error {
-	constructor() {
-		super('Scan root directory does not exist or is inaccessible');
-		this.name = 'ScanRootNotFoundError';
-	}
 }
 
 export class PluginStateService {
@@ -90,22 +70,37 @@ export class PluginStateService {
 
 		// Prevent changing the scan root after importing files.
 		if (currentData.pluginData.fileRecords.length > 0) {
-			throw new ScanRootLockedError();
+			throw new FilePilotError(
+				'SCAN_ROOT_LOCKED',
+				'Scan root cannot be changed after files have been imported',
+			);
 		}
 
 		// Validate the root path.
 		if (newPath !== '' && !isAbsolute(newPath)) {
-			throw new ScanRootInvalidError();
+			throw new FilePilotError(
+				'SCAN_ROOT_INVALID',
+				'Scan root must be an absolute path',
+			);
 		}
 		if (newPath !== '') {
+			let isDirectory: boolean;
+
 			try {
 				const info = await stat(newPath);
-
-				if (!info.isDirectory()) {
-					throw new ScanRootNotFoundError();
-				}
+				isDirectory = info.isDirectory();
 			} catch {
-				throw new ScanRootNotFoundError();
+				throw new FilePilotError(
+					'SCAN_ROOT_NOT_FOUND',
+					'Scan root directory does not exist or is inaccessible',
+				);
+			}
+
+			if (!isDirectory) {
+				throw new FilePilotError(
+					'SCAN_ROOT_NOT_FOUND',
+					'Scan root path is not a directory',
+				);
 			}
 		}
 		const nextData = structuredClone(currentData);

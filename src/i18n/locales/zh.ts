@@ -26,4 +26,5 @@ export const zh = {
 	SameNameFile: `文件 {fileName} 的影子笔记存在命名冲突，${pluginName}已在影子笔记后面添加UUID，强烈建议手动修改文件名`,
 	scanFailed: `扫描失败`,
 	scanning: `扫描文件夹中`,
+	syncAlreadyInProgress: `正在同步中`,
 } satisfies Record<keyof typeof en, string>;

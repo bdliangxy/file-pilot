@@ -11,6 +11,7 @@ const jiti = createTestJiti(import.meta.url);
 const { FileSyncService } = await jiti.import(
 	'../../src/core/file-sync.ts',
 );
+const { FilePilotError } = await jiti.import('../../src/error.ts');
 
 function makeScope(rootPath = 'C:\\files') {
 	return {
@@ -78,7 +79,7 @@ test('rejects an empty scan root before scanning', async () => {
 
 	await assert.rejects(
 		service.syncFiles(makeScope('   ')),
-		/Scan root is not configured/,
+		(error) => error instanceof FilePilotError && error.code === 'SCAN_ROOT_NOT_CONFIGURED',
 	);
 	assert.equal(scanCalled, false);
 	assert.equal(persistCalled, false);
@@ -145,7 +146,7 @@ test('rejects a concurrent sync while one is already running', async () => {
 
 	await assert.rejects(
 		service.syncFiles(makeScope()),
-		/Sync already in progress/,
+		(error) => error instanceof FilePilotError && error.code === 'SYNC_IN_PROGRESS',
 	);
 
 	releaseScan();

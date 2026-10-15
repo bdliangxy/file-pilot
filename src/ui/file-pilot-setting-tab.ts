@@ -7,11 +7,7 @@ import {
 } from 'obsidian';
 
 import type FilePilotPlugin from '../main';
-import {
-	ScanRootLockedError,
-	ScanRootInvalidError,
-	ScanRootNotFoundError
-} from '../data/plugin-state-service';
+import { FilePilotError } from '../error';
 import { t } from '../i18n';
 import { pickFolder } from './folder-picker';
 
@@ -89,15 +85,24 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			await this.filePilot.stateService.setRootPath(value);
 			new Notice(t('scanRootSaved'));
 		} catch (error) {
-			if (error instanceof ScanRootLockedError) {
-				new Notice(t('scanRootLocked'));
-			} else if (error instanceof ScanRootInvalidError) {
-				new Notice(t('scanRootInvalid'));
-			} else if (error instanceof ScanRootNotFoundError) {
-				new Notice(t('scanRootNotFound'));
-			} else {
-				new Notice(t('scanRootSaveFailed'));
+			if (error instanceof FilePilotError) {
+				switch (error.code) {
+					case 'SCAN_ROOT_LOCKED':
+						new Notice(t('scanRootLocked'));
+						return;
+
+					case 'SCAN_ROOT_INVALID':
+						new Notice(t('scanRootInvalid'));
+						return;
+
+					case 'SCAN_ROOT_NOT_FOUND':
+						new Notice(t('scanRootNotFound'));
+						return;
+				}
 			}
+
+			console.error('Failed to save scan root:', error);
+			new Notice(t('scanRootSaveFailed'));
 		}
 	}
 }

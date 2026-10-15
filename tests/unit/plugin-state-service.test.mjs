@@ -3,15 +3,11 @@ import test from 'node:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createJiti } from 'jiti';
+import { createTestJiti } from '../fakes/index.mjs';
 
-const jiti = createJiti(import.meta.url);
-const {
-	PluginStateService,
-	ScanRootLockedError,
-	ScanRootInvalidError,
-	ScanRootNotFoundError,
-} = await jiti.import('../../src/data/plugin-state-service.ts');
+const jiti = createTestJiti(import.meta.url);
+const { PluginStateService } = await jiti.import('../../src/data/plugin-state-service.ts');
+const { FilePilotError } = await jiti.import('../../src/error.ts');
 
 function makeRecord(id = 'file-1') {
 	return {
@@ -158,15 +154,15 @@ test('rejects relative paths, missing directories and regular files', async (t) 
 
 	await assert.rejects(
 		service.setRootPath('relative/folder'),
-		ScanRootInvalidError,
+		(error) => error instanceof FilePilotError && error.code === 'SCAN_ROOT_INVALID',
 	);
 	await assert.rejects(
 		service.setRootPath(join(directory, 'missing')),
-		ScanRootNotFoundError,
+		(error) => error instanceof FilePilotError && error.code === 'SCAN_ROOT_NOT_FOUND',
 	);
 	await assert.rejects(
 		service.setRootPath(regularFile),
-		ScanRootNotFoundError,
+		(error) => error instanceof FilePilotError && error.code === 'SCAN_ROOT_NOT_FOUND',
 	);
 
 	assert.equal(service.getRootPath(), '');
@@ -180,7 +176,7 @@ test('prevents changing the root when file records exist', async () => {
 
 	await assert.rejects(
 		service.setRootPath('C:\\different'),
-		ScanRootLockedError,
+		(error) => error instanceof FilePilotError && error.code === 'SCAN_ROOT_LOCKED',
 	);
 
 	assert.equal(service.getRootPath(), 'C:\\existing');
