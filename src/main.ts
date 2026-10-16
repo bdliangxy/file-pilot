@@ -84,4 +84,14 @@ export default class FilePilotPlugin extends Plugin {
 		);
 	}
 
+	refreshViewRootPath(): void {
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
+
+		for (const leaf of leaves) {
+			if (leaf.view instanceof FilePilotView) {
+				leaf.view.refreshRootPath();
+			}
+		}
+	}
+
 }

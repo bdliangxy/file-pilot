@@ -83,6 +83,8 @@ export class FilePilotSettingTab extends PluginSettingTab {
 	private async handleRootPathChange(value: string): Promise<void> {
 		try {
 			await this.filePilot.stateService.setRootPath(value);
+			// Refresh the displayed scan root in opened FilePilot views.
+			this.filePilot.refreshViewRootPath();
 			new Notice(t('scanRootSaved'));
 		} catch (error) {
 			if (error instanceof FilePilotError) {

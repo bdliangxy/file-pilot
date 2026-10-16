@@ -9,6 +9,7 @@ export const VIEW_TYPE = 'file-pilot-view';
 export class FilePilotView extends ItemView {
 	navigation = false;
 	private scanning = false;
+	private rootSetting: Setting | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -29,18 +30,24 @@ export class FilePilotView extends ItemView {
 		return 'spline-pointer';
 	}
 
+	refreshRootPath(): void {
+		this.rootSetting?.setDesc(
+			this.filePilot.stateService.getRootPath()
+			|| t('scanRootNotConfigured')
+		);
+	}
+
 	async onOpen(): Promise<void> {
 		const { contentEl } = this;
 		contentEl.empty();
+		const scanRow = contentEl.createDiv();
 
 		const rootPath =
 			this.filePilot.stateService.getRootPath();
 
-		new Setting(contentEl)
+		this.rootSetting = new Setting(scanRow)
 			.setName(t('scanRootName'))
-			.setDesc(rootPath || t('scanRootNotConfigured'));
-
-		new Setting(contentEl)
+			.setDesc(rootPath || t('scanRootNotConfigured'))
 			.addButton((button) => {
 				button
 					.setButtonText(t('oneWayScan'))
@@ -81,6 +88,7 @@ export class FilePilotView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.rootSetting = null;
 		this.contentEl.empty();
 	}
 }
