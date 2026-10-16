@@ -11,14 +11,21 @@ import {
 	getFileBaseName,
 	getFileExtension,
 } from '../utils/path-utils';
+
+import ignore, { type Ignore } from 'ignore';
 export class FileScanner {
 	async scan(fileScope: FileScope): Promise<ScannedFileInfo[]> {
 		const results: ScannedFileInfo[] = [];
+
+		const ignoreMatcher = ignore().add(
+			fileScope.ignorePatterns,
+		);
 
 		await this.scanDirectory(
 			fileScope.rootPath,
 			fileScope.rootPath,
 			results,
+			ignoreMatcher,
 		);
 
 		return results;
@@ -28,6 +35,7 @@ export class FileScanner {
 		rootPath: string,
 		currentPath: string,
 		results: ScannedFileInfo[],
+		ignoreMatcher: Ignore,
 	): Promise<void> {
 		const entries = await fs.readdir(
 			currentPath,
@@ -39,12 +47,19 @@ export class FileScanner {
 				currentPath,
 				entry.name,
 			);
-
+			const relativePath = getRelativeFilePath(
+				rootPath,
+				absolutePath,
+			);
 			if (entry.isDirectory()) {
+				if (ignoreMatcher.ignores(`${relativePath}/`)) {
+					continue;
+				}
 				await this.scanDirectory(
 					rootPath,
 					absolutePath,
 					results,
+					ignoreMatcher,
 				);
 
 				continue;
@@ -53,7 +68,9 @@ export class FileScanner {
 			if (!entry.isFile()) {
 				continue;
 			}
-
+			if (ignoreMatcher.ignores(relativePath)) {
+				continue;
+			}
 			const stats = await fs.stat(absolutePath);
 
 			const nativeIdentity =
@@ -62,10 +79,7 @@ export class FileScanner {
 					: undefined;
 
 			const scannedFileInfo: ScannedFileInfo = {
-				path: getRelativeFilePath(
-					rootPath,
-					absolutePath,
-				),
+				path: relativePath,
 				nativeIdentity,
 				baseName: getFileBaseName(entry.name),
 				extension: getFileExtension(entry.name),

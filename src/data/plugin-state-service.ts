@@ -4,6 +4,7 @@ import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { FileScope, FileRecord } from '../core/file-interface';
 import { FilePilotError } from '../error';
+import ignore from 'ignore';
 // Represents the complete structure stored in Obsidian's data.json.
 interface Data {
 	settingData: SettingData;
@@ -18,6 +19,16 @@ const DEFAULT_DATA: Data = {
 export interface DataAdapter {
 	loadData(): Promise<unknown>;
 	saveData(data: Data): Promise<void>;
+}
+
+export interface SettingsChanges {
+	rootPath?: string;
+	ignorePatterns?: string[];
+}
+
+export interface SettingsUpdateResult {
+	updated: (keyof SettingsChanges)[];
+	errors: Partial<Record<keyof SettingsChanges, Error>>;
 }
 
 export class PluginStateService {
@@ -41,7 +52,11 @@ export class PluginStateService {
 	getRootPath(): string {
 		return this.getData().settingData.fileScope.rootPath;
 	}
-
+	getIgnorePatterns(): string[] {
+		return structuredClone(
+			this.getData().settingData.fileScope.ignorePatterns,
+		);
+	}
 	getFileRecordCount(): number {
 		return this.getData().pluginData.fileRecords.length;
 	}
@@ -60,14 +75,10 @@ export class PluginStateService {
 		await this.save(nextData);
 	}
 
-	async setRootPath(rootPath: string): Promise<void> {
-		const currentData = this.getData();
-		const newPath = rootPath.trim();
-
-		if (newPath === currentData.settingData.fileScope.rootPath) {
-			return;
-		}
-
+	private async validateRootPath(
+		rootPath: string,
+		currentData: Data,
+	): Promise<void> {
 		// Prevent changing the scan root after importing files.
 		if (currentData.pluginData.fileRecords.length > 0) {
 			throw new FilePilotError(
@@ -75,19 +86,19 @@ export class PluginStateService {
 				'Scan root cannot be changed after files have been imported',
 			);
 		}
-
 		// Validate the root path.
-		if (newPath !== '' && !isAbsolute(newPath)) {
+		if (rootPath !== '' && !isAbsolute(rootPath)) {
 			throw new FilePilotError(
 				'SCAN_ROOT_INVALID',
 				'Scan root must be an absolute path',
 			);
 		}
-		if (newPath !== '') {
+
+		if (rootPath !== '') {
 			let isDirectory: boolean;
 
 			try {
-				const info = await stat(newPath);
+				const info = await stat(rootPath);
 				isDirectory = info.isDirectory();
 			} catch {
 				throw new FilePilotError(
@@ -103,12 +114,85 @@ export class PluginStateService {
 				);
 			}
 		}
+	}
+
+	async updateSettings(
+		changes: SettingsChanges,
+	): Promise<SettingsUpdateResult> {
+		const currentData = this.getData();
 		const nextData = structuredClone(currentData);
 
-		nextData.settingData.fileScope.rootPath = newPath;
+		const result: SettingsUpdateResult = {
+			updated: [],
+			errors: {},
+		};
+
+		// 1. validate and handle rootpath scanning
+		if (changes.rootPath !== undefined) {
+			const newPath = changes.rootPath.trim();
+
+			if (newPath !== currentData.settingData.fileScope.rootPath) {
+				try {
+					await this.validateRootPath(
+						newPath,
+						currentData,
+					);
+
+					nextData.settingData.fileScope.rootPath = newPath;
+					result.updated.push('rootPath');
+				} catch (error) {
+					if (!(error instanceof FilePilotError)) {
+						throw error;
+					}
+
+					result.errors.rootPath = error;
+				}
+			}
+		}
+
+		// 2. validate and handle Ignore rule
+		if (changes.ignorePatterns !== undefined) {
+			// Remove empty lines, but preserve other pattern characters.
+			const nextPatterns = changes.ignorePatterns.filter(
+				(pattern) => pattern.trim().length > 0,
+			);
+
+			try {
+				// Validate with the same parser used by FileScanner.
+				ignore().add(nextPatterns);
+
+
+				const previous =
+					currentData.settingData.fileScope.ignorePatterns;
+
+				const unchanged =
+					previous.length === nextPatterns.length
+					&& previous.every(
+						(pattern, index) => pattern === nextPatterns[index],
+					);
+
+				if (!unchanged) {
+					nextData.settingData.fileScope.ignorePatterns = nextPatterns;
+					result.updated.push('ignorePatterns');
+				}
+			} catch (error) {
+				result.errors.ignorePatterns =
+					error instanceof Error
+						? error
+						: new Error(String(error));
+			}
+
+		}
+
+		if (result.updated.length === 0) {
+			return result;
+		}
 
 		await this.save(nextData);
+
+		return result;
 	}
+
 
 	private async save(data: Data): Promise<void> {
 		await this.dataAdapter.saveData(data);
@@ -117,7 +201,7 @@ export class PluginStateService {
 
 	private getData(): Data {
 		if (this.data === null) {
-			throw new Error('Plugin state has not been loaded');
+			throw new FilePilotError('DATA_LOST', 'Plugin data has lost');
 		}
 
 		return this.data;

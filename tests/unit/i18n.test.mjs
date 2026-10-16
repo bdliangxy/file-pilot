@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-	createTestJiti,
-	setLanguage,
-} from '../fakes/index.mjs';
+import { setLanguage } from '../fakes/index.mjs';
+import { createTestJiti } from '../helpers/test-jiti.mjs';
 
 const jiti = createTestJiti(import.meta.url);
 const { t } = await jiti.import('../../src/i18n/index.ts');

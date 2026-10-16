@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-	createFakeShadowNoteService,
-	createTestJiti,
-	makeScannedFile,
-} from '../fakes/index.mjs';
+import { createFakeShadowNoteService } from '../fakes/index.mjs';
+import { makeScannedFile } from '../factories/file-record.mjs';
+import { createTestJiti } from '../helpers/test-jiti.mjs';
 
 const jiti = createTestJiti(import.meta.url);
 const { importScannedFiles } = await jiti.import(

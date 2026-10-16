@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createFakeVault, createTestJiti } from '../fakes/index.mjs';
+import { createFakeVault } from '../fakes/index.mjs';
+import { createTestJiti } from '../helpers/test-jiti.mjs';
 
 const jiti = createTestJiti(import.meta.url);
 const { ShadowNoteService } = await jiti.import('../../src/core/shadow-note.ts');

@@ -3,7 +3,8 @@ export type FilePilotErrorCode =
 	| 'SCAN_ROOT_NOT_CONFIGURED'
 	| 'SCAN_ROOT_LOCKED'
 	| 'SCAN_ROOT_INVALID'
-	| 'SCAN_ROOT_NOT_FOUND';
+	| 'SCAN_ROOT_NOT_FOUND'
+	| 'DATA_LOST';
 
 export class FilePilotError extends Error {
 	constructor(

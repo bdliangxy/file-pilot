@@ -8,10 +8,17 @@ export const en = {
 	// words in setting view
 	scanRootName: `project directory`,
 	scanRootDesc: `The local folder managed by ${pluginName}.`,
-	scanRootPlaceholder: `Enter the absolute path of the folder and press Enter to confirm.`,
+	scanRootPlaceholder: `Enter the absolute path of the folder`,
 	scanRootBrowse: `Browse`,
 	scanRootSave: `Save`,
 	scanRootSelect: `Select scan directory`,
+	settingsSave: 'Save settings',
+	settingsSaved: `Settings saved`,
+	settingsPartiallySaved: `Some settings were saved`,
+	settingsSaveFailed: `Failed to save settings`,
+	settingsInvalid: `Invalid settings`,
+	ignorePatternsInvalid: `Invalid ignore pattern`,
+	settingsUnchanged: 'No settings were changed',
 	// responses after selecting directory
 	scanRootSaved: `Scan directory saved`,
 	scanRootInvalid: `Enter a valid absolute directory path`,

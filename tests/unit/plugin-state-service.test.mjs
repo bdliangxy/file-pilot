@@ -3,57 +3,19 @@ import test from 'node:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createTestJiti } from '../fakes/index.mjs';
+import { createTestJiti } from '../helpers/test-jiti.mjs';
+import { makeFileRecord } from '../factories/file-record.mjs';
+import { makePluginData } from '../factories/plugin-data.mjs';
+import { createFakeDataAdapter } from '../fakes/index.mjs';
+import { createPluginStateServiceTestContext } from '../helpers/plugin-state-service.mjs';
 
 const jiti = createTestJiti(import.meta.url);
 const { PluginStateService } = await jiti.import('../../src/data/plugin-state-service.ts');
 const { FilePilotError } = await jiti.import('../../src/error.ts');
 
-function makeRecord(id = 'file-1') {
-	return {
-		id,
-		path: 'docs/report.pdf',
-		nativeIdentity: '1:2',
-		baseName: 'report',
-		extension: 'pdf',
-		size: 123,
-		mtimeMs: 456,
-		status: 'available',
-		shadowNotePath: 'ShadowNotes/report.md',
-	};
-}
-
-function makeData(rootPath = '', fileRecords = []) {
-	return {
-		settingData: {
-			fileScope: {
-				rootPath,
-				ignorePatterns: [],
-				watchEnabled: true,
-			},
-		},
-		pluginData: {
-			version: 2,
-			fileRecords,
-		},
-	};
-}
-
-function createService(storedData = makeData()) {
-	const savedData = [];
-	const service = new PluginStateService({
-		loadData: async () => storedData,
-		saveData: async (data) => {
-			savedData.push(structuredClone(data));
-		},
-	});
-
-	return { service, savedData };
-}
-
 test('loads existing state without writing it again', async () => {
-	const storedData = makeData('C:\\existing', [makeRecord()]);
-	const { service, savedData } = createService(storedData);
+	const storedData = makePluginData({ rootPath: 'C:\\existing', fileRecords: [makeFileRecord()] });
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService, storedData);
 
 	assert.equal(await service.load(), undefined);
 	assert.deepEqual(service.getFileScope(), storedData.settingData.fileScope);
@@ -63,11 +25,11 @@ test('loads existing state without writing it again', async () => {
 });
 
 test('saves and initializes defaults when stored data is missing', async () => {
-	const { service, savedData } = createService(null);
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService, null);
 
 	await service.load();
 
-	const expected = makeData();
+	const expected = makePluginData();
 	expected.pluginData.version = 1;
 
 	assert.deepEqual(savedData, [expected]);
@@ -76,8 +38,8 @@ test('saves and initializes defaults when stored data is missing', async () => {
 });
 
 test('isolates state from source objects and returned file scopes', async () => {
-	const storedData = makeData('C:\\existing');
-	const { service } = createService(storedData);
+	const storedData = makePluginData({ rootPath: 'C:\\existing' });
+	const { service } = createPluginStateServiceTestContext(PluginStateService, storedData);
 
 	await service.load();
 
@@ -91,11 +53,11 @@ test('isolates state from source objects and returned file scopes', async () => 
 });
 
 test('adds records and persists the updated state', async () => {
-	const { service, savedData } = createService();
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService,);
 
 	await service.load();
 
-	const record = makeRecord();
+	const record = makeFileRecord();
 	await service.addFileRecords([record]);
 
 	assert.equal(service.getFileRecordCount(), 1);
@@ -107,7 +69,7 @@ test('adds records and persists the updated state', async () => {
 });
 
 test('adding an empty batch does not persist anything', async () => {
-	const { service, savedData } = createService();
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService,);
 	await service.load();
 
 	await service.addFileRecords([]);
@@ -118,88 +80,97 @@ test('adding an empty batch does not persist anything', async () => {
 
 test('failed record persistence leaves in-memory state unchanged', async () => {
 	const service = new PluginStateService({
-		loadData: async () => makeData(),
+		loadData: async () => makePluginData(),
 		saveData: async () => {
 			throw new Error('Disk failure');
 		},
 	});
 	await service.load();
 
-	await assert.rejects(service.addFileRecords([makeRecord()]), /Disk failure/);
+	await assert.rejects(service.addFileRecords([makeFileRecord()]), /Disk failure/);
 	assert.equal(service.getFileRecordCount(), 0);
 });
 
-test('sets and persists a validated, trimmed root path', async (t) => {
+test('updates and persists a validated, trimmed root path', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'file-pilot-state-'));
 	t.after(async () => rm(directory, { recursive: true, force: true }));
 
-	const { service, savedData } = createService();
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService);
 	await service.load();
 
-	await service.setRootPath('  ' + directory + '  ');
+	const result = await service.updateSettings({ rootPath: '  ' + directory + '  ' });
 
+	assert.deepEqual(result, { updated: ['rootPath'], errors: {} });
 	assert.equal(service.getRootPath(), directory);
+	assert.equal(savedData.length, 1);
 	assert.equal(savedData[0].settingData.fileScope.rootPath, directory);
 });
 
-test('rejects relative paths, missing directories and regular files', async (t) => {
+test('reports invalid root paths without saving or throwing', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'file-pilot-state-'));
 	t.after(async () => rm(directory, { recursive: true, force: true }));
 
 	const regularFile = join(directory, 'not-a-directory.txt');
 	await writeFile(regularFile, 'test');
 
-	const { service, savedData } = createService();
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService);
 	await service.load();
 
-	await assert.rejects(
-		service.setRootPath('relative/folder'),
-		(error) => error instanceof FilePilotError && error.code === 'SCAN_ROOT_INVALID',
-	);
-	await assert.rejects(
-		service.setRootPath(join(directory, 'missing')),
-		(error) => error instanceof FilePilotError && error.code === 'SCAN_ROOT_NOT_FOUND',
-	);
-	await assert.rejects(
-		service.setRootPath(regularFile),
-		(error) => error instanceof FilePilotError && error.code === 'SCAN_ROOT_NOT_FOUND',
-	);
+	for (const [path, code] of [
+		['relative/folder', 'SCAN_ROOT_INVALID'],
+		[join(directory, 'missing'), 'SCAN_ROOT_NOT_FOUND'],
+		[regularFile, 'SCAN_ROOT_NOT_FOUND'],
+	]) {
+		const result = await service.updateSettings({ rootPath: path });
+		assert.deepEqual(result.updated, []);
+		assert.ok(result.errors.rootPath instanceof FilePilotError);
+		assert.equal(result.errors.rootPath.code, code);
+	}
 
 	assert.equal(service.getRootPath(), '');
 	assert.equal(savedData.length, 0);
 });
 
-test('prevents changing the root when file records exist', async () => {
-	const storedData = makeData('C:\\existing', [makeRecord()]);
-	const { service, savedData } = createService(storedData);
+test('reports a locked root and preserves existing records', async () => {
+	const storedData = makePluginData({
+		rootPath: 'C:\\existing',
+		fileRecords: [makeFileRecord()],
+	});
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService, storedData);
 	await service.load();
 
-	await assert.rejects(
-		service.setRootPath('C:\\different'),
-		(error) => error instanceof FilePilotError && error.code === 'SCAN_ROOT_LOCKED',
-	);
+	const result = await service.updateSettings({ rootPath: 'C:\\different' });
 
+	assert.deepEqual(result.updated, []);
+	assert.equal(result.errors.rootPath?.code, 'SCAN_ROOT_LOCKED');
 	assert.equal(service.getRootPath(), 'C:\\existing');
+	assert.equal(service.getFileRecordCount(), 1);
 	assert.equal(savedData.length, 0);
 });
 
-test('setting the same root path does not save again', async () => {
-	const { service, savedData } = createService(
-		makeData('C:\\existing', [makeRecord()]),
+test('unchanged root path does not trigger validation or persistence', async () => {
+	const { service, savedData } = createPluginStateServiceTestContext(
+		PluginStateService,
+		makePluginData({ rootPath: 'C:\\existing', fileRecords: [makeFileRecord()] }),
 	);
 	await service.load();
 
-	await service.setRootPath('C:\\existing');
+	const result = await service.updateSettings({ rootPath: 'C:\\existing' });
 
+	assert.deepEqual(result, { updated: [], errors: {} });
 	assert.equal(savedData.length, 0);
 });
 
 test('allows clearing a configured scan root', async () => {
-	const { service, savedData } = createService(makeData('C:\\existing'));
+	const { service, savedData } = createPluginStateServiceTestContext(
+		PluginStateService,
+		makePluginData({ rootPath: 'C:\\existing' }),
+	);
 	await service.load();
 
-	await service.setRootPath('   ');
+	const result = await service.updateSettings({ rootPath: '   ' });
 
+	assert.deepEqual(result, { updated: ['rootPath'], errors: {} });
 	assert.equal(service.getRootPath(), '');
 	assert.equal(savedData.length, 1);
 	assert.equal(savedData[0].settingData.fileScope.rootPath, '');
@@ -210,21 +181,188 @@ test('failed root persistence leaves the previous path unchanged', async (t) => 
 	t.after(async () => rm(directory, { recursive: true, force: true }));
 
 	const service = new PluginStateService({
-		loadData: async () => makeData(),
+		loadData: async () => makePluginData(),
 		saveData: async () => {
 			throw new Error('Disk failure');
 		},
 	});
 	await service.load();
 
-	await assert.rejects(service.setRootPath(directory), /Disk failure/);
+	await assert.rejects(service.updateSettings({ rootPath: directory }), /Disk failure/);
 	assert.equal(service.getRootPath(), '');
 });
 
-test('requires load before accessing state', async () => {
-	const { service } = createService();
+test('requires load before accessing or updating state', async () => {
+	const { service } = createPluginStateServiceTestContext(PluginStateService);
+	const isDataLost = (error) =>
+		error instanceof FilePilotError && error.code === 'DATA_LOST';
 
-	assert.throws(() => service.getRootPath(), /has not been loaded/);
-	assert.throws(() => service.getFileRecordCount(), /has not been loaded/);
-	await assert.rejects(service.addFileRecords([makeRecord()]), /has not been loaded/);
+	assert.throws(() => service.getRootPath(), isDataLost);
+	assert.throws(() => service.getIgnorePatterns(), isDataLost);
+	assert.throws(() => service.getFileRecordCount(), isDataLost);
+	await assert.rejects(service.addFileRecords([makeFileRecord()]), isDataLost);
+	await assert.rejects(service.updateSettings({ ignorePatterns: ['*.tmp'] }), isDataLost);
+});
+
+test('getIgnorePatterns returns an isolated copy', async () => {
+	const storedData = makePluginData({ ignorePatterns: ['*.tmp'] });
+	const { service } = createPluginStateServiceTestContext(PluginStateService, storedData);
+	await service.load();
+
+	const returned = service.getIgnorePatterns();
+	returned.push('ignored/');
+	storedData.settingData.fileScope.ignorePatterns.push('external/');
+
+	assert.deepEqual(service.getIgnorePatterns(), ['*.tmp']);
+});
+
+test('updates ignore patterns without modifying unrelated state', async () => {
+	const record = makeFileRecord();
+	const initial = makePluginData({ rootPath: 'C:\\existing', fileRecords: [record] });
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService, initial);
+	await service.load();
+
+	const result = await service.updateSettings({ ignorePatterns: ['*.tmp', 'private/'] });
+
+	assert.deepEqual(result, { updated: ['ignorePatterns'], errors: {} });
+	assert.deepEqual(service.getIgnorePatterns(), ['*.tmp', 'private/']);
+	assert.equal(savedData.length, 1);
+	assert.equal(savedData[0].settingData.fileScope.rootPath, initial.settingData.fileScope.rootPath);
+	assert.deepEqual(savedData[0].pluginData.fileRecords, [record]);
+	assert.deepEqual(savedData[0].settingData.fileScope.ignorePatterns, ['*.tmp', 'private/']);
+});
+
+test('ignores blank rules but preserves pattern order and meaningful whitespace', async () => {
+	const { service } = createPluginStateServiceTestContext(PluginStateService);
+	await service.load();
+
+	const result = await service.updateSettings({
+		ignorePatterns: ['', '*.pdf', '   ', '!important.pdf', 'name\\ ', '# comment'],
+	});
+
+	assert.deepEqual(result, { updated: ['ignorePatterns'], errors: {} });
+	assert.deepEqual(service.getIgnorePatterns(), [
+		'*.pdf', '!important.pdf', 'name\\ ', '# comment',
+	]);
+});
+
+test('unchanged and normalized-equivalent ignore rules do not save again', async () => {
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService);
+	await service.load();
+
+	const first = await service.updateSettings({ ignorePatterns: [] });
+	const second = await service.updateSettings({ ignorePatterns: ['*.tmp', '', 'private/'] });
+	const third = await service.updateSettings({ ignorePatterns: ['*.tmp', '   ', 'private/'] });
+
+	assert.deepEqual(first.updated, []);
+	assert.deepEqual(second.updated, ['ignorePatterns']);
+	assert.deepEqual(third.updated, []);
+	assert.equal(savedData.length, 1);
+});
+
+test('supports clearing existing ignore rules', async () => {
+	const initial = makePluginData({ ignorePatterns: ['*.tmp'] });
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService, initial);
+	await service.load();
+
+	const result = await service.updateSettings({ ignorePatterns: [] });
+
+	assert.deepEqual(result, { updated: ['ignorePatterns'], errors: {} });
+	assert.deepEqual(service.getIgnorePatterns(), []);
+	assert.equal(savedData.length, 1);
+	assert.deepEqual(savedData[0].settingData.fileScope.ignorePatterns, []);
+});
+
+test('failed ignore persistence leaves in-memory state unchanged', async () => {
+	const initial = makePluginData({ ignorePatterns: ['original/'] });
+	const service = new PluginStateService({
+		loadData: async () => structuredClone(initial),
+		saveData: async () => { throw new Error('Disk failure'); },
+	});
+	await service.load();
+
+	await assert.rejects(
+		service.updateSettings({ ignorePatterns: ['new/'] }),
+		/Disk failure/,
+	);
+	assert.deepEqual(service.getIgnorePatterns(), ['original/']);
+});
+
+test('reloads saved ignore rules from a persistent adapter', async () => {
+	const adapter = createFakeDataAdapter(makePluginData());
+	const firstService = new PluginStateService(adapter);
+	await firstService.load();
+	const result = await firstService.updateSettings({ ignorePatterns: ['*.tmp', 'private/'] });
+
+	const secondService = new PluginStateService(adapter);
+	await secondService.load();
+
+	assert.deepEqual(result.updated, ['ignorePatterns']);
+	assert.deepEqual(secondService.getIgnorePatterns(), ['*.tmp', 'private/']);
+	assert.equal(adapter.savedData.length, 1);
+});
+
+test('valid root and ignore changes are committed in a single write', async (t) => {
+	const directory = await mkdtemp(join(tmpdir(), 'file-pilot-state-'));
+	t.after(async () => rm(directory, { recursive: true, force: true }));
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService);
+	await service.load();
+
+	const result = await service.updateSettings({
+		rootPath: directory,
+		ignorePatterns: ['*.tmp', 'build/'],
+	});
+
+	assert.deepEqual(result, {
+		updated: ['rootPath', 'ignorePatterns'],
+		errors: {},
+	});
+	assert.equal(savedData.length, 1);
+	assert.equal(service.getRootPath(), directory);
+	assert.deepEqual(service.getIgnorePatterns(), ['*.tmp', 'build/']);
+	assert.equal(savedData[0].settingData.fileScope.rootPath, directory);
+	assert.deepEqual(savedData[0].settingData.fileScope.ignorePatterns, ['*.tmp', 'build/']);
+});
+
+test('an invalid root does not prevent valid ignore rules from being saved', async () => {
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService);
+	await service.load();
+
+	const result = await service.updateSettings({
+		rootPath: 'relative/invalid',
+		ignorePatterns: ['*.log'],
+	});
+
+	assert.deepEqual(result.updated, ['ignorePatterns']);
+	assert.equal(result.errors.rootPath?.code, 'SCAN_ROOT_INVALID');
+	assert.equal(service.getRootPath(), '');
+	assert.deepEqual(service.getIgnorePatterns(), ['*.log']);
+	assert.equal(savedData.length, 1);
+	assert.equal(savedData[0].settingData.fileScope.rootPath, '');
+});
+
+test('invalid root with unchanged ignore rules makes no write', async () => {
+	const initial = makePluginData({ ignorePatterns: ['*.tmp'] });
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService, initial);
+	await service.load();
+
+	const result = await service.updateSettings({
+		rootPath: 'relative/invalid',
+		ignorePatterns: ['*.tmp'],
+	});
+
+	assert.deepEqual(result.updated, []);
+	assert.equal(result.errors.rootPath?.code, 'SCAN_ROOT_INVALID');
+	assert.deepEqual(service.getIgnorePatterns(), ['*.tmp']);
+	assert.equal(savedData.length, 0);
+});
+
+test('omitted settings are not modified or persisted', async () => {
+	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService);
+	await service.load();
+
+	const result = await service.updateSettings({});
+
+	assert.deepEqual(result, { updated: [], errors: {} });
+	assert.equal(savedData.length, 0);
 });

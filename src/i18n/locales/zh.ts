@@ -8,7 +8,7 @@ export const zh = {
 
 	scanRootName: `项目文件夹`,
 	scanRootDesc: `${pluginName}管理的本地文件夹`,
-	scanRootPlaceholder: `输入文件夹的绝对路径，按回车确认`,
+	scanRootPlaceholder: `输入文件夹的绝对路径`,
 	scanRootBrowse: `浏览`,
 	scanRootSave: `保存`,
 	scanRootSelect: `选择扫描目录`,
@@ -19,6 +19,13 @@ export const zh = {
 	scanRootLocked: `已有文件记录，暂不支持修改扫描根目录`,
 	scanRootSaveFailed: `保存扫描目录失败`,
 	scanRootBrowseFailed: `无法打开文件夹选择窗口，请手动输入路径`,
+	settingsSave: '保存设置',
+	settingsSaved: `设置已保存`,
+	settingsPartiallySaved: `部分设置已保存`,
+	settingsSaveFailed: `保存设置失败`,
+	settingsInvalid: `设置内容无效`,
+	ignorePatternsInvalid: `忽略规则格式无效`,
+	settingsUnchanged: '设置未更新',
 
 	oneWayScan: `单向扫描`,
 	scanRootNotConfigured: `请先在插件设置页添加文件夹`,
