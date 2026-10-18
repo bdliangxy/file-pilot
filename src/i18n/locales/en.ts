@@ -54,7 +54,7 @@ export const en = {
 	scanRootSaved: `Scan directory saved`,
 	scanRootInvalid: `Enter a valid absolute directory path`,
 	scanRootNotFound: `The directory does not exist or is not accessible`,
-	scanRootLocked: `Cannot change the scan root while file records exist`,
+	scanRootLocked: `Cannot change the project directory while file records exist`,
 	scanRootSaveFailed: `Failed to save the directory`,
 	scanRootBrowseFailed: `Folder picker is unavailable. Enter the path manually.`,
 	// file pilot view

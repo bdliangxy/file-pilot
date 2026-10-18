@@ -1,0 +1,249 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createJiti } from 'jiti';
+import {
+    Setting, Notice, findButton, setLanguage,
+} from '../fakes/obsidian-settings.mjs';
+import { makePluginData } from '../factories/plugin-data.mjs';
+import { makeFileRecord } from '../factories/file-record.mjs';
+import { createPluginStateServiceTestContext } from '../helpers/plugin-state-service.mjs';
+
+const jiti = createJiti(import.meta.url, {
+    alias: {
+        obsidian: fileURLToPath(new URL('../fakes/obsidian-settings.mjs', import.meta.url)),
+    },
+});
+const { FilePilotSettingTab } = await jiti.import(
+    '../../src/ui/file-pilot-setting-tab.ts',
+);
+const { PluginStateService } = await jiti.import(
+    '../../src/data/plugin-state-service.ts',
+);
+
+async function setup(data = makePluginData()) {
+    setLanguage('en');
+    const { service, savedData } = createPluginStateServiceTestContext(PluginStateService, data);
+    await service.load();
+
+    let refreshes = 0;
+    const plugin = {
+        stateService: service,
+        refreshViewRootPath() { refreshes++; },
+    };
+    const tab = new FilePilotSettingTab({}, plugin);
+    const definitions = tab.getSettingDefinitions();
+    const settings = definitions.map((definition) => {
+        const setting = new Setting();
+        definition.render(setting);
+        return setting;
+    });
+    Notice.messages.length = 0;
+    return {
+        service,
+        savedData,
+        tab,
+        settings,
+        rootInput: settings[0].texts[0],
+        ignoreInput: settings[1].textAreas[0],
+        browse: findButton(settings[0], 'Browse'),
+        save: findButton(settings[2], 'Save settings'),
+        get refreshes() { return refreshes; },
+    };
+}
+
+async function waitFor(check) {
+    for (let attempt = 0; attempt < 100; attempt++) {
+        if (check()) return;
+        await delay(10);
+    }
+    assert.fail('Timed out waiting for an asynchronous settings update');
+}
+
+function installDialog(t, dialog) {
+    const previousWindow = globalThis.window;
+    globalThis.window = {
+        require(id) {
+            assert.equal(id, '@electron/remote');
+            return { dialog };
+        },
+    };
+    t.after(() => {
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+    });
+}
+
+test('Enter saves a valid root without saving the unsaved Ignore draft', async (t) => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'file-pilot-tab-'));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const ui = await setup();
+    ui.ignoreInput.edit('*.tmp');
+
+    ui.rootInput.setValue('  ' + directory + '  ');
+    assert.equal(ui.rootInput.inputEl.dispatchKey('Enter', true).prevented, false);
+    assert.equal(ui.service.getRootPath(), '');
+
+    assert.equal(ui.rootInput.inputEl.dispatchKey('Enter').prevented, true);
+    await waitFor(() => ui.service.getRootPath() === directory);
+    assert.equal(ui.rootInput.getValue(), directory);
+    assert.deepEqual(ui.service.getIgnorePatterns(), []);
+    assert.equal(ui.refreshes, 1);
+    assert.equal(ui.savedData.length, 1);
+});
+
+test('Enter rejects a locked root and restores the stored path', async () => {
+    const existing = path.resolve('saved-root');
+    const ui = await setup(makePluginData({
+        rootPath: existing,
+        fileRecords: [makeFileRecord()],
+    }));
+    ui.rootInput.setValue(path.resolve('different-root'));
+    ui.rootInput.inputEl.dispatchKey('Enter');
+
+    await waitFor(() => Notice.messages.length > 0);
+    assert.equal(ui.service.getRootPath(), existing);
+    assert.equal(ui.rootInput.getValue(), existing);
+    assert.equal(ui.refreshes, 0);
+    assert.equal(ui.savedData.length, 0);
+    assert.match(Notice.messages[0], /Cannot change/);
+});
+
+test('Browse selection saves the root and cancellation changes nothing', async (t) => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'file-pilot-browse-'));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    let canceled = false;
+    installDialog(t, {
+        async showOpenDialog(options) {
+            assert.deepEqual(options.properties, ['openDirectory', 'showHiddenFiles']);
+            return canceled
+                ? { canceled: true, filePaths: [] }
+                : { canceled: false, filePaths: [directory] };
+        },
+    });
+
+    const ui = await setup();
+    await ui.browse.click();
+    assert.equal(ui.rootInput.getValue(), directory);
+    assert.equal(ui.service.getRootPath(), directory);
+    assert.equal(ui.refreshes, 1);
+
+    canceled = true;
+    await ui.browse.click();
+    assert.equal(ui.rootInput.getValue(), directory);
+    assert.equal(ui.savedData.length, 1);
+});
+
+test('Browse restores the previous root when changing it is locked', async (t) => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'file-pilot-browse-'));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    installDialog(t, {
+        async showOpenDialog() {
+            return { canceled: false, filePaths: [directory] };
+        },
+    });
+    const initial = path.resolve('saved-root');
+    const ui = await setup(makePluginData({
+        rootPath: initial,
+        fileRecords: [makeFileRecord()],
+    }));
+
+    await ui.browse.click();
+    assert.equal(ui.service.getRootPath(), initial);
+    assert.equal(ui.rootInput.getValue(), initial);
+    assert.equal(ui.savedData.length, 0);
+    assert.equal(ui.refreshes, 0);
+});
+
+test('Save settings commits the Ignore draft but restores a locked root', async () => {
+    const initial = path.resolve('saved-root');
+    const ui = await setup(makePluginData({
+        rootPath: initial,
+        ignorePatterns: ['*.pdf'],
+        fileRecords: [makeFileRecord()],
+    }));
+    ui.rootInput.setValue(path.resolve('new-root'));
+    ui.ignoreInput.edit('*.pdf\n*.log');
+
+    await ui.save.click();
+
+    assert.equal(ui.rootInput.getValue(), initial);
+    assert.equal(ui.service.getRootPath(), initial);
+    assert.deepEqual(ui.service.getIgnorePatterns(), ['*.pdf', '*.log']);
+    assert.deepEqual(ui.tab.getSettingDefinitions().length, 3);
+    assert.equal(ui.ignoreInput.getValue(), '*.pdf\n*.log');
+    assert.equal(ui.savedData.length, 1);
+    assert.match(Notice.messages[0], /Some settings were saved/);
+});
+
+test('Save settings restores an invalid root while preserving unchanged Ignore rules', async () => {
+    const ui = await setup(makePluginData({ ignorePatterns: ['*.pdf'] }));
+    ui.rootInput.setValue('relative/not-allowed');
+
+    await ui.save.click();
+
+    assert.equal(ui.rootInput.getValue(), '');
+    assert.equal(ui.service.getRootPath(), '');
+    assert.deepEqual(ui.service.getIgnorePatterns(), ['*.pdf']);
+    assert.equal(ui.savedData.length, 0);
+    assert.match(Notice.messages[0], /Failed to save settings/);
+});
+
+test('failed persistence also restores the root and reports an error', async (t) => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'file-pilot-failed-save-'));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+
+    const service = new PluginStateService({
+        loadData: async () => makePluginData(),
+        saveData: async () => { throw new Error('Disk failure'); },
+    });
+    await service.load();
+    const tab = new FilePilotSettingTab({}, {
+        stateService: service,
+        refreshViewRootPath() { assert.fail('Should not refresh on failure'); },
+    });
+    const setting = new Setting();
+    tab.getSettingDefinitions()[0].render(setting);
+    const rootInput = setting.texts[0];
+    rootInput.setValue(directory);
+    Notice.messages.length = 0;
+
+    rootInput.inputEl.dispatchKey('Enter');
+    await waitFor(() => Notice.messages.length > 0);
+
+    assert.equal(rootInput.getValue(), '');
+    assert.equal(service.getRootPath(), '');
+    assert.match(Notice.messages[0], /Failed to save settings/);
+});
+
+test('an in-flight save does not replace edits typed after submission', async () => {
+    let finishSave;
+    const stateService = {
+        getRootPath() { return 'saved'; },
+        getIgnorePatterns() { return []; },
+        updateSettings() {
+            return new Promise((resolve) => {
+                finishSave = () => resolve({ updated: [], errors: {} });
+            });
+        },
+    };
+    const tab = new FilePilotSettingTab({}, {
+        stateService,
+        refreshViewRootPath() { },
+    });
+    const root = new Setting();
+    tab.getSettingDefinitions()[0].render(root);
+    const input = root.texts[0];
+
+    input.setValue('submitted');
+    input.inputEl.dispatchKey('Enter');
+    input.setValue('still editing');
+    finishSave();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(input.getValue(), 'still editing');
+});

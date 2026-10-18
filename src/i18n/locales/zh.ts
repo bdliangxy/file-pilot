@@ -20,7 +20,7 @@ export const zh = {
 	scanRootSaved: `扫描目录已保存`,
 	scanRootInvalid: `请输入有效的绝对目录路径`,
 	scanRootNotFound: `目录不存在或无法访问`,
-	scanRootLocked: `已有文件记录，暂不支持修改扫描根目录`,
+	scanRootLocked: `已有文件记录，暂不支持修改项目文件夹`,
 	scanRootSaveFailed: `保存扫描目录失败`,
 	scanRootBrowseFailed: `无法打开文件夹选择窗口，请手动输入路径`,
 	settingsSave: '保存设置',

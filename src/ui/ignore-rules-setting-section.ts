@@ -406,7 +406,7 @@ export class IgnoreRulesSettingSection {
 			event.preventDefault();
 
 			const extension = input.value;
-
+			input.value = '';
 			if (!inputIsValidExtension(extension)) {
 				new Notice(t('ignoreExtensionInvalid'));
 				return;
