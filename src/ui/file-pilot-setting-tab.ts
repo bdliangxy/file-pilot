@@ -22,6 +22,10 @@ import {
 	importIgnoreRules,
 	exportIgnoreRules,
 } from './ignore-rules-file-dialog';
+import { realpath } from 'node:fs/promises';
+import { isAbsolute, relative, sep } from 'node:path';
+import { logger } from '../utils/logger';
+import { getRelativeFilePath } from '../utils/path-utils';
 
 type SettingsSaveFeedback =
 	| {
@@ -51,9 +55,14 @@ function classifyIgnorePattern(
 		return null;
 	}
 
-	// Complex patterns require the full-text editor.
-	const hasSpecialSyntax = ['*', '?', '[', ']', '\\']
-		.some((char) => pattern.includes(char));
+	// Remove supported literal escapes before detecting complex syntax.
+	const simplifiedPattern = pattern.replace(
+		/\\[\\*?!#[\] ]/g,
+		'',
+	);
+
+	const hasSpecialSyntax =
+		/[\\*?[\]]/.test(simplifiedPattern);
 
 	// A trailing slash indicates a directory rule.
 	if (pattern.endsWith('/') && !hasSpecialSyntax) {
@@ -71,6 +80,50 @@ function classifyIgnorePattern(
 	}
 
 	return null;
+}
+
+function escapeGitignorePath(relativePath: string): string {
+	return relativePath
+		// Escape Gitignore metacharacters as literal characters.
+		.replace(/[\\*?!#[\]]/g, '\\$&')
+		// Preserve trailing spaces in filenames.
+		.replace(/ +$/, (spaces) => '\\ '.repeat(spaces.length));
+}
+
+function createSelectedIgnorePattern(
+	rootPath: string,
+	selectedPath: string,
+	category: 'directories' | 'filenames',
+): string {
+	// Convert the absolute path to a normalized relative path.
+	const relativePath = getRelativeFilePath(
+		rootPath,
+		selectedPath,
+	);
+
+	const escapedPath = escapeGitignorePath(relativePath);
+
+	// Anchor the rule to the scan root.
+	const prefix = '/';
+
+	// Directory rules require a trailing slash.
+	const suffix = category === 'directories' ? '/' : '';
+
+	return `${prefix}${escapedPath}${suffix}`;
+}
+
+function isPathInsideRoot(
+	rootPath: string,
+	selectedPath: string,
+): boolean {
+	const relativePath = relative(rootPath, selectedPath);
+
+	return (
+		relativePath !== '' &&
+		relativePath !== '..' &&
+		!relativePath.startsWith(`..${sep}`) &&
+		!isAbsolute(relativePath)
+	);
 }
 
 
@@ -152,7 +205,55 @@ export class FilePilotSettingTab extends PluginSettingTab {
 
 					const addButton = new ButtonComponent(modeRow)
 						.setIcon('plus')
-						.setDisabled(true);
+						.onClick(async () => {
+							const mode = modeDropdown.getValue();
+
+							if (mode !== 'directories' && mode !== 'filenames') {
+								return;
+							}
+
+							const selectedPaths = await this.pickValidatedIgnorePaths(mode);
+
+							if (selectedPaths.length === 0) {
+								return;
+							}
+
+							const rootPath = this.filePilot.stateService.getRootPath();
+
+							const newPatterns = selectedPaths.map((selectedPath) =>
+								createSelectedIgnorePattern(rootPath, selectedPath, mode)
+							);
+
+							// Deduplicate against existing rules and within this selection.
+							const existingPatterns = new Set(this.ignorePatternsDraft);
+
+							const patternsToAdd = newPatterns.filter((pattern) => {
+								if (existingPatterns.has(pattern)) {
+									return false;
+								}
+
+								existingPatterns.add(pattern);
+								return true;
+							});
+
+							// No new rules to add.
+							if (patternsToAdd.length === 0) {
+								return;
+							}
+
+							// Update the draft without persisting settings.
+							this.ignorePatternsDraft.push(...patternsToAdd);
+
+							// Synchronize the full-text editor.
+							this.syncIgnoreInput();
+
+							// Refresh pills only if the user is still viewing this category.
+							if (modeDropdown.getValue() === mode) {
+								this.renderIgnoreRuleItems(categoryList, mode);
+							}
+
+							logger.debug('Added ignore patterns:', patternsToAdd);
+						});
 
 					addButton.buttonEl.addClass(
 						'file-pilot-ignore-add-button',
@@ -495,4 +596,59 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			});
 		}
 	}
+
+
+	private async pickValidatedIgnorePaths(
+		category: 'directories' | 'filenames',
+	): Promise<string[]> {
+		const rootPath = this.filePilot.stateService.getRootPath();
+
+		// Require a saved scan root.
+		if (rootPath === '') {
+			new Notice(t('ignoreRootRequired'));
+			return [];
+		}
+
+		try {
+			const realRootPath = await realpath(rootPath);
+
+			const selectedPaths = await pickPaths({
+				title: category === 'directories'
+					? t('ignoreSelectFolders')
+					: t('ignoreSelectFiles'),
+				defaultPath: rootPath,
+				properties: [
+					category === 'directories'
+						? 'openDirectory'
+						: 'openFile',
+					'multiSelections',
+				],
+			});
+
+			// The user canceled the dialog.
+			if (selectedPaths.length === 0) {
+				return [];
+			}
+
+			// Validate every selected path before accepting the batch.
+			for (const selectedPath of selectedPaths) {
+				const realSelectedPath = await realpath(selectedPath);
+
+				if (
+					!isPathInsideRoot(rootPath, selectedPath) ||
+					!isPathInsideRoot(realRootPath, realSelectedPath)
+				) {
+					new Notice(t('ignoreOutsideRoot'));
+					return [];
+				}
+			}
+
+			return selectedPaths;
+		} catch (error) {
+			console.error('Failed to select ignore paths:', error);
+			new Notice(t('ignoreSelectionFailed'));
+			return [];
+		}
+	}
+
 }

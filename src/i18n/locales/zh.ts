@@ -47,6 +47,11 @@ export const zh = {
 	ignoreExtensionsDesc: '查看被忽略扫描的文件扩展名',
 	ignoreCategoryPlaceholder: '目前暂无匹配内容',
 	ignoreRemoveRule: '移除忽略规则',
+	ignoreRootRequired: '请先添加并保存项目文件夹，再添加忽略规则',
+	ignoreSelectFolders: '选择要忽略的文件夹',
+	ignoreSelectFiles: '选择要忽略的文件',
+	ignoreOutsideRoot: '只能选择项目文件夹下的文件或文件夹',
+	ignoreSelectionFailed: '选择文件或文件夹失败',
 
 	oneWayScan: `单向扫描`,
 	scanRootNotConfigured: `请先在插件设置页添加文件夹`,

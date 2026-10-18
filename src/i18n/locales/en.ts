@@ -40,6 +40,11 @@ export const en = {
 	ignoreExtensionsDesc: 'View rules matching file extensions.',
 	ignoreCategoryPlaceholder: 'There is no matching content currently.',
 	ignoreRemoveRule: 'Remove ignore rule',
+	ignoreRootRequired: 'Add and save the project directory before adding ignore rules.',
+	ignoreSelectFolders: 'Select folders to ignore',
+	ignoreSelectFiles: 'Select files to ignore',
+	ignoreOutsideRoot: 'Only files and folders inside the project directory can be selected.',
+	ignoreSelectionFailed: 'Failed to select files or folders.',
 	// responses after selecting directory
 	scanRootSaved: `Scan directory saved`,
 	scanRootInvalid: `Enter a valid absolute directory path`,
