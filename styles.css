@@ -2,3 +2,119 @@
 	width: 100%;
 	max-width: 100%;
 }
+
+/* Display the Ignore description above its textarea. */
+.file-pilot-ignore-setting {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 8px;
+}
+
+/* Layout for the main Ignore setting only. */
+.file-pilot-ignore-setting>.setting-item-control {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 8px;
+}
+
+/* Align Ignore action buttons to the left. */
+.file-pilot-ignore-actions button {
+	align-self: flex-start;
+}
+
+.file-pilot-ignore-textarea {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	resize: vertical;
+}
+
+.file-pilot-ignore-actions {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+	width: 100%;
+}
+
+/* Dropdown menu for Ignore view mode */
+.file-pilot-ignore-mode-select {
+	align-self: flex-start;
+	max-width: 100%;
+}
+
+/* Used to toggle the Ignore display area */
+.file-pilot-ignore-hidden {
+	display: none !important;
+}
+
+/* Container for categorized ignore rule pills. */
+.file-pilot-ignore-category-list {
+	display: flex;
+	flex-wrap: wrap;
+	align-content: flex-start;
+	align-items: flex-start;
+	gap: 8px;
+
+	width: 100%;
+	min-height: 60px;
+	box-sizing: border-box;
+	padding: 12px;
+}
+
+/* Individual ignore rule pill. */
+.file-pilot-ignore-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 6px 3px 12px;
+
+	border-radius: 999px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	color: var(--text-normal);
+
+	max-width: 100%;
+}
+
+.file-pilot-ignore-pill-label {
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
+
+/* Remove button inside the pill. */
+.file-pilot-ignore-pill button {
+	--no-tooltip: true;
+	box-shadow: none;
+	background: transparent;
+	border: none;
+	border-radius: 50%;
+	padding: 2px;
+	height: 22px;
+	width: 22px;
+	transition: transform 100ms ease, background-color 100ms ease, box-shadow 100ms ease;
+}
+
+/* Highlight the remove button with the current theme accent color. */
+.file-pilot-ignore-pill button:hover {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	box-shadow: var(--input-shadow-hover, 0 2px 6px rgba(0, 0, 0, 0.18));
+}
+
+/* Deepen the accent color and press the button downward while held. */
+.file-pilot-ignore-pill button:active {
+	transform: translateY(2px);
+	background: var(--interactive-accent-hover);
+	color: var(--text-on-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.file-pilot-ignore-pill button {
+		transition: none;
+	}
+}

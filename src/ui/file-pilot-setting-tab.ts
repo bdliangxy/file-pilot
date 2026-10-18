@@ -3,17 +3,25 @@ import {
 	Notice,
 	PluginSettingTab,
 	Setting,
+	DropdownComponent,
 	type TextComponent,
+	type TextAreaComponent,
+	ButtonComponent
 } from 'obsidian';
 
 import type FilePilotPlugin from '../main';
 import { FilePilotError } from '../error';
 import { t } from '../i18n';
-import { pickFolder } from './folder-picker';
+import { pickPaths } from './native-file-dialog';
 import type {
 	SettingsChanges,
 	SettingsUpdateResult,
 } from '../data/plugin-state-service';
+import { DEFAULT_IGNORE_PATTERNS } from '../data/setting-data';
+import {
+	importIgnoreRules,
+	exportIgnoreRules,
+} from './ignore-rules-file-dialog';
 
 type SettingsSaveFeedback =
 	| {
@@ -26,9 +34,50 @@ type SettingsSaveFeedback =
 	};
 
 
+type IgnoreRuleCategory =
+	| 'directories'
+	| 'filenames'
+	| 'extensions';
+
+function classifyIgnorePattern(
+	pattern: string,
+): IgnoreRuleCategory | null {
+	// Skip empty lines, comments, and negation rules.
+	if (
+		pattern.trim() === '' ||
+		pattern.startsWith('#') ||
+		pattern.startsWith('!')
+	) {
+		return null;
+	}
+
+	// Complex patterns require the full-text editor.
+	const hasSpecialSyntax = ['*', '?', '[', ']', '\\']
+		.some((char) => pattern.includes(char));
+
+	// A trailing slash indicates a directory rule.
+	if (pattern.endsWith('/') && !hasSpecialSyntax) {
+		return 'directories';
+	}
+
+	// Recognize simple extension patterns.
+	if (/^\*\.[a-zA-Z0-9_-]+$/.test(pattern)) {
+		return 'extensions';
+	}
+
+	// Recognize simple name-based patterns.
+	if (!hasSpecialSyntax && !pattern.endsWith('/')) {
+		return 'filenames';
+	}
+
+	return null;
+}
+
+
 export class FilePilotSettingTab extends PluginSettingTab {
 	private rootPathInput?: TextComponent;
-
+	private ignorePatternsInput?: TextAreaComponent;
+	private ignorePatternsDraft: string[] = [];
 	constructor(
 		app: App,
 		private readonly filePilot: FilePilotPlugin,
@@ -59,10 +108,17 @@ export class FilePilotSettingTab extends PluginSettingTab {
 								.onClick(async () => {
 									let selectedPath: string | undefined;
 									try {
-										selectedPath = await pickFolder(
-											this.filePilot.stateService.getRootPath()
+										const selectedPaths = await pickPaths(
+											{
+												title: t('scanRootSelect'),
+												defaultPath:
+													this.filePilot.stateService.getRootPath() || undefined,
+												properties: ['openDirectory'],
+											}
 										);
-									} catch {
+										selectedPath = selectedPaths[0];
+									} catch (error) {
+										console.error('Failed to import rootPath:', error);
 										new Notice(t('scanRootBrowseFailed'));
 										return;
 									}
@@ -76,8 +132,160 @@ export class FilePilotSettingTab extends PluginSettingTab {
 				},
 			},
 
+
 			{
-				// name: t('settingsSave'),
+				name: t('ignorePatternsName'),
+				desc: t('ignorePatternsDesc'),
+
+				render: (setting: Setting) => {
+					setting.settingEl.addClass('file-pilot-ignore-setting');
+
+					const modeDropdown = new DropdownComponent(
+						setting.controlEl,
+					)
+						.addOption('all', t('ignoreViewAll'))
+						.addOption('directories', t('ignoreViewDirectories'))
+						.addOption('filenames', t('ignoreViewFilenames'))
+						.addOption('extensions', t('ignoreViewExtensions'))
+						.setValue('all');
+
+					modeDropdown.selectEl.addClass(
+						'file-pilot-ignore-mode-select',
+					);
+					this.ignorePatternsDraft =
+						this.filePilot.stateService.getIgnorePatterns();
+					setting.addTextArea((textArea) => {
+						this.ignorePatternsInput = textArea;
+
+						textArea
+							.setValue(this.ignorePatternsDraft.join('\n'))
+							.onChange((value) => this.setIgnoreDraft(value))
+							;
+
+						textArea.inputEl.rows = 8;
+						textArea.inputEl.addClass(
+							'file-pilot-ignore-textarea',
+						);
+					})
+
+					const actions = setting.controlEl.createDiv({
+						cls: 'file-pilot-ignore-actions',
+					});
+
+					// restore default ignore
+					new ButtonComponent(actions)
+						.setButtonText(t('restorDefault'))
+						.onClick(() => {
+							this.setIgnoreDraft(
+								DEFAULT_IGNORE_PATTERNS.join('\n'),
+							);
+							this.syncIgnoreInput();
+						});
+
+					// clear
+					new ButtonComponent(actions)
+						.setButtonText(t('clear'))
+						.onClick(() => {
+							this.setIgnoreDraft('');
+							this.syncIgnoreInput();
+						});
+
+					// import
+					new ButtonComponent(actions)
+						.setButtonText(t('import'))
+						.onClick(async () => {
+							try {
+								const content = await importIgnoreRules();
+
+								if (content === undefined) {
+									return;
+								}
+
+								this.setIgnoreDraft(content);
+								this.syncIgnoreInput();
+								new Notice(t('ignoreImportedDraft'));
+							} catch (error) {
+								console.error('Failed to import ignore rules:', error);
+								new Notice(t('ignoreImportFailed'));
+							}
+						});
+
+					// export
+					new ButtonComponent(actions)
+						.setButtonText(t('export'))
+						.onClick(async () => {
+							try {
+								const content = this.ignorePatternsDraft.join('\n');
+
+								const exported = await exportIgnoreRules(content);
+
+								if (exported) {
+									new Notice(t('ignoreExported'));
+								}
+							} catch (error) {
+								console.error('Failed to export ignore rules:', error);
+								new Notice(t('ignoreExportFailed'));
+							}
+						});
+
+
+					const categoryList = setting.controlEl.createDiv({
+						cls: 'file-pilot-ignore-category-list file-pilot-ignore-hidden',
+					});
+
+					modeDropdown.onChange((mode) => {
+						switch (mode) {
+							case 'directories':
+								setting.setDesc(t('ignoreDirectoriesDesc'));
+								break;
+
+							case 'filenames':
+								setting.setDesc(t('ignoreFilenamesDesc'));
+								break;
+
+							case 'extensions':
+								setting.setDesc(t('ignoreExtensionsDesc'));
+								break;
+
+							case 'all':
+							default:
+								setting.setDesc(t('ignorePatternsDesc'));
+								break;
+						}
+
+						const showAll = mode === 'all';
+
+						this.ignorePatternsInput?.inputEl.classList.toggle(
+							'file-pilot-ignore-hidden',
+							!showAll,
+						);
+
+						actions.classList.toggle(
+							'file-pilot-ignore-hidden',
+							!showAll,
+						);
+
+						categoryList.classList.toggle(
+							'file-pilot-ignore-hidden',
+							showAll,
+						);
+
+						if (
+							mode === 'directories' ||
+							mode === 'filenames' ||
+							mode === 'extensions'
+						) {
+							this.renderIgnoreRuleItems(categoryList, mode);
+						}
+					});
+
+
+				},
+			},
+
+
+			{
+				name: '',
 				render: (setting: Setting) => {
 					setting.addButton((button) => {
 						button
@@ -86,12 +294,22 @@ export class FilePilotSettingTab extends PluginSettingTab {
 							.onClick(async () => {
 								const result = await this.saveSettings({
 									rootPath: this.rootPathInput?.getValue(),
+									ignorePatterns: [...this.ignorePatternsDraft],
 								});
 
 								if (result && !result.errors.rootPath) {
 									this.rootPathInput?.setValue(
 										this.filePilot.stateService.getRootPath(),
 									);
+								}
+
+								if (result && !result.errors.ignorePatterns) {
+									this.setIgnoreDraft(
+										this.filePilot.stateService
+											.getIgnorePatterns()
+											.join('\n'),
+									);
+									this.syncIgnoreInput();
 								}
 							});
 					});
@@ -125,7 +343,6 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			return null;
 		}
 	}
-
 
 	private showSettingsFeedback(
 		feedback: SettingsSaveFeedback,
@@ -185,6 +402,7 @@ export class FilePilotSettingTab extends PluginSettingTab {
 
 		// Nothing changed and no error occurred.
 		if (updated.length === 0 && !hasErrors) {
+			new Notice(t('settingsUnchanged'));
 			return;
 		}
 
@@ -202,5 +420,66 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			[summary, ...errorMessages].join('\n'),
 		);
 	}
+
+
+	private setIgnoreDraft(text: string): void {
+		this.ignorePatternsDraft =
+			text === '' ? [] : text.split(/\r?\n/);
+	}
+
+	private syncIgnoreInput(): void {
+		this.ignorePatternsInput?.setValue(
+			this.ignorePatternsDraft.join('\n'),
+		);
+	}
+
+
+	private renderIgnoreRuleItems(
+		container: HTMLElement,
+		category: IgnoreRuleCategory,
+	): void {
+		container.empty();
+
+		const matchedRules = this.ignorePatternsDraft
+			.map((pattern, index) => ({ pattern, index }))
+			.filter(
+				({ pattern }) =>
+					classifyIgnorePattern(pattern) === category,
+			);
+
+		if (matchedRules.length === 0) {
+			container.setText(t('ignoreCategoryPlaceholder'));
+			return;
+		}
+
+		for (const { pattern, index } of matchedRules) {
+			const pill = container.createDiv({
+				cls: 'file-pilot-ignore-pill',
+			});
+
+			pill.dataset.ruleIndex = String(index);
+			pill.createSpan({
+				cls: 'file-pilot-ignore-pill-label',
+				text: pattern,
+			});
+
+			const removeButton = new ButtonComponent(pill)
+				.setIcon('x');
+
+			removeButton.buttonEl.setAttribute(
+				'aria-label',
+				t('ignoreRemoveRule'),
+			);
+
+			removeButton.onClick(() => {
+				// Remove only this occurrence from the complete draft.
+				this.ignorePatternsDraft.splice(index, 1);
+				this.syncIgnoreInput();
+				this.renderIgnoreRuleItems(container, category);
+			});
+		}
+	}
+
+
 
 }
