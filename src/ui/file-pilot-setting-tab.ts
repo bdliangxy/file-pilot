@@ -43,6 +43,15 @@ type IgnoreRuleCategory =
 	| 'filenames'
 	| 'extensions';
 
+const MAX_EXTENSION_LENGTH = 64;
+
+function inputIsValidExtension(extension: string): boolean {
+	return (
+		extension.length <= MAX_EXTENSION_LENGTH &&
+		/^[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$/.test(extension)
+	);
+}
+
 function classifyIgnorePattern(
 	pattern: string,
 ): IgnoreRuleCategory | null {
@@ -69,8 +78,10 @@ function classifyIgnorePattern(
 		return 'directories';
 	}
 
-	// Recognize simple extension patterns.
-	if (/^\*\.[a-zA-Z0-9_-]+$/.test(pattern)) {
+	// Recognize simple and compound extension patterns.
+	if (
+		/^\*\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$/.test(pattern)
+	) {
 		return 'extensions';
 	}
 
@@ -153,7 +164,19 @@ export class FilePilotSettingTab extends PluginSettingTab {
 
 							text
 								.setPlaceholder(t('scanRootPlaceholder'))
-								.setValue(this.filePilot.stateService.getRootPath());
+								.setValue(this.filePilot.stateService.getRootPath())
+								.inputEl.addEventListener('keydown', (event) => {
+									if (event.key !== 'Enter' || event.isComposing) {
+										return;
+									}
+
+									event.preventDefault();
+
+									void this.saveSettings({
+										rootPath: this.rootPathInput?.getValue(),
+									});
+								});
+
 						})
 						.addButton((button) => {
 							button
@@ -180,6 +203,9 @@ export class FilePilotSettingTab extends PluginSettingTab {
 										return;
 									}
 									this.rootPathInput?.setValue(selectedPath);
+									await this.saveSettings({
+										rootPath: selectedPath,
+									});
 								});
 						});
 				},
@@ -414,12 +440,6 @@ export class FilePilotSettingTab extends PluginSettingTab {
 									ignorePatterns: [...this.ignorePatternsDraft],
 								});
 
-								if (result && !result.errors.rootPath) {
-									this.rootPathInput?.setValue(
-										this.filePilot.stateService.getRootPath(),
-									);
-								}
-
 								if (result && !result.errors.ignorePatterns) {
 									this.setIgnoreDraft(
 										this.filePilot.stateService
@@ -458,6 +478,16 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			});
 
 			return null;
+		} finally {
+			// Restore the persisted root path after a save attempt.
+			if (
+				changes.rootPath !== undefined &&
+				this.rootPathInput?.getValue() === changes.rootPath
+			) {
+				this.rootPathInput.setValue(
+					this.filePilot.stateService.getRootPath(),
+				);
+			}
 		}
 	}
 
@@ -564,7 +594,10 @@ export class FilePilotSettingTab extends PluginSettingTab {
 					classifyIgnorePattern(pattern) === category,
 			);
 
-		if (matchedRules.length === 0) {
+		if (
+			matchedRules.length === 0 &&
+			category !== 'extensions'
+		) {
 			container.setText(t('ignoreCategoryPlaceholder'));
 			return;
 		}
@@ -594,6 +627,10 @@ export class FilePilotSettingTab extends PluginSettingTab {
 				this.syncIgnoreInput();
 				this.renderIgnoreRuleItems(container, category);
 			});
+		}
+		// Always show an empty input pill in extension mode.
+		if (category === 'extensions') {
+			this.renderIgnoreExtensionInput(container);
 		}
 	}
 
@@ -649,6 +686,76 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			new Notice(t('ignoreSelectionFailed'));
 			return [];
 		}
+	}
+
+
+	private renderIgnoreExtensionInput(
+		container: HTMLElement,
+	): void {
+		const pill = container.createDiv({
+			cls: 'file-pilot-ignore-pill file-pilot-ignore-extension-editor',
+		});
+
+		// The "*." prefix is not editable.
+		pill.createSpan({
+			cls: 'file-pilot-ignore-extension-prefix',
+			text: '*.',
+		});
+
+		const input = pill.createEl('input', {
+			cls: 'file-pilot-ignore-extension-input',
+		});
+
+		input.type = 'text';
+		input.maxLength = MAX_EXTENSION_LENGTH;
+		input.setAttribute(
+			'aria-label',
+			t('ignoreExtensionInput'),
+		);
+
+		input.addEventListener('keydown', (event) => {
+			if (event.key !== 'Enter' || event.isComposing) {
+				return;
+			}
+
+			event.preventDefault();
+
+			const extension = input.value;
+
+			if (!inputIsValidExtension(extension)) {
+				new Notice(t('ignoreExtensionInvalid'));
+				return;
+			}
+
+			const pattern = `*.${extension}`;
+
+			// Check duplicates without regard to letter case.
+			const isDuplicate = this.ignorePatternsDraft.some(
+				(existing) =>
+					existing.toLowerCase() === pattern.toLowerCase(),
+			);
+
+			if (isDuplicate) {
+				new Notice(t('ignoreExtensionDuplicate'));
+				return;
+			}
+
+			// Append the new rule to the draft.
+			this.ignorePatternsDraft.push(pattern);
+
+			// Synchronize the full-text editor.
+			this.syncIgnoreInput();
+
+			// Rebuild the pills, including a fresh empty editor.
+			this.renderIgnoreRuleItems(container, 'extensions');
+
+			// Move focus to the newly created input.
+			container
+				.querySelector<HTMLInputElement>(
+					'.file-pilot-ignore-extension-input',
+				)
+				?.focus();
+		});
 	}
 
 }

@@ -12,7 +12,7 @@ export const zh = {
 
 	scanRootName: `项目文件夹`,
 	scanRootDesc: `${pluginName}管理的本地文件夹`,
-	scanRootPlaceholder: `输入文件夹的绝对路径`,
+	scanRootPlaceholder: `输入文件夹的绝对路径,按回车保存`,
 	scanRootBrowse: `浏览`,
 	scanRootSave: `保存`,
 	scanRootSelect: `选择扫描目录`,
@@ -52,6 +52,10 @@ export const zh = {
 	ignoreSelectFiles: '选择要忽略的文件',
 	ignoreOutsideRoot: '只能选择项目文件夹下的文件或文件夹',
 	ignoreSelectionFailed: '选择文件或文件夹失败',
+	ignoreExtensionInput: '输入要忽略的扩展名',
+	ignoreExtensionInvalid:
+		'扩展名只能包含英文字母、数字、下划线、连字符及中间的句点',
+	ignoreExtensionDuplicate: '该扩展名已存在于忽略规则中',
 
 	oneWayScan: `单向扫描`,
 	scanRootNotConfigured: `请先在插件设置页添加文件夹`,

@@ -132,3 +132,41 @@
 		transition: none;
 	}
 }
+
+/* Editable pill for manually adding extension rules. */
+.file-pilot-ignore-extension-editor {
+	border-style: dashed;
+	gap: 4px;
+	background: var(--background-modifier-hover);
+}
+
+/* Fixed prefix before the extension input. */
+.file-pilot-ignore-extension-prefix {
+	flex-shrink: 0;
+	font-weight: 500;
+}
+
+/* Input field embedded inside the pill. */
+.file-pilot-ignore-extension-editor input[type="text"] {
+	width: 110px;
+	min-width: 0;
+	height: 22px;
+	padding: 0;
+
+	border: none;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-normal);
+	font: inherit;
+}
+
+/* Highlight the entire pill when its input is focused. */
+.file-pilot-ignore-extension-editor:focus-within {
+	border-color: var(--interactive-accent);
+}
+
+.file-pilot-ignore-extension-editor input[type="text"]:focus {
+	border: none;
+	outline: none;
+	box-shadow: none;
+}

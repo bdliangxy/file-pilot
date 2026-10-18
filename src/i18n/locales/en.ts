@@ -12,7 +12,7 @@ export const en = {
 	// words in setting view
 	scanRootName: `project directory`,
 	scanRootDesc: `The local folder managed by ${pluginName}.`,
-	scanRootPlaceholder: `Enter the absolute path of the folder`,
+	scanRootPlaceholder: `Enter the absolute path of the folder,press Enter to save.`,
 	scanRootBrowse: `Browse`,
 	scanRootSave: `Save`,
 	scanRootSelect: `Select scan directory`,
@@ -45,6 +45,11 @@ export const en = {
 	ignoreSelectFiles: 'Select files to ignore',
 	ignoreOutsideRoot: 'Only files and folders inside the project directory can be selected.',
 	ignoreSelectionFailed: 'Failed to select files or folders.',
+	ignoreExtensionInput: 'Enter an extension to ignore',
+	ignoreExtensionInvalid:
+		'Extensions must contain only letters, numbers, underscores, hyphens, and dots between segments.',
+	ignoreExtensionDuplicate:
+		'This extension already exists in the ignore rules.',
 	// responses after selecting directory
 	scanRootSaved: `Scan directory saved`,
 	scanRootInvalid: `Enter a valid absolute directory path`,
