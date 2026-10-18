@@ -47,6 +47,20 @@
 	max-width: 100%;
 }
 
+/* Keep the mode selector and add button on the same row. */
+.file-pilot-ignore-mode-row {
+	display: flex;
+	align-items: center;
+	align-self: flex-start;
+	gap: 8px;
+	max-width: 100%;
+}
+
+/* Prevent the add button from shrinking. */
+.file-pilot-ignore-add-button {
+	flex-shrink: 0;
+}
+
 /* Used to toggle the Ignore display area */
 .file-pilot-ignore-hidden {
 	display: none !important;

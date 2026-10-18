@@ -139,15 +139,25 @@ export class FilePilotSettingTab extends PluginSettingTab {
 
 				render: (setting: Setting) => {
 					setting.settingEl.addClass('file-pilot-ignore-setting');
-
-					const modeDropdown = new DropdownComponent(
-						setting.controlEl,
-					)
+					// Group the mode selector and add button in one row.
+					const modeRow = setting.controlEl.createDiv({
+						cls: 'file-pilot-ignore-mode-row',
+					});
+					const modeDropdown = new DropdownComponent(modeRow)
 						.addOption('all', t('ignoreViewAll'))
 						.addOption('directories', t('ignoreViewDirectories'))
 						.addOption('filenames', t('ignoreViewFilenames'))
 						.addOption('extensions', t('ignoreViewExtensions'))
 						.setValue('all');
+
+					const addButton = new ButtonComponent(modeRow)
+						.setIcon('plus')
+						.setDisabled(true);
+
+					addButton.buttonEl.addClass(
+						'file-pilot-ignore-add-button',
+						'file-pilot-ignore-hidden',
+					);
 
 					modeDropdown.selectEl.addClass(
 						'file-pilot-ignore-mode-select',
@@ -254,7 +264,13 @@ export class FilePilotSettingTab extends PluginSettingTab {
 						}
 
 						const showAll = mode === 'all';
+						const showAddButton =
+							mode === 'directories' || mode === 'filenames';
 
+						addButton.buttonEl.classList.toggle(
+							'file-pilot-ignore-hidden',
+							!showAddButton,
+						);
 						this.ignorePatternsInput?.inputEl.classList.toggle(
 							'file-pilot-ignore-hidden',
 							!showAll,
