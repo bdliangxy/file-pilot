@@ -479,7 +479,4 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			});
 		}
 	}
-
-
-
 }

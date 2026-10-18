@@ -11,6 +11,7 @@ import { createPluginStateServiceTestContext } from '../helpers/plugin-state-ser
 
 const jiti = createTestJiti(import.meta.url);
 const { PluginStateService } = await jiti.import('../../src/data/plugin-state-service.ts');
+const { DEFAULT_IGNORE_PATTERNS } = await jiti.import('../../src/data/setting-data.ts');
 const { FilePilotError } = await jiti.import('../../src/error.ts');
 
 test('loads existing state without writing it again', async () => {
@@ -29,7 +30,7 @@ test('saves and initializes defaults when stored data is missing', async () => {
 
 	await service.load();
 
-	const expected = makePluginData();
+	const expected = makePluginData({ ignorePatterns: [...DEFAULT_IGNORE_PATTERNS] });
 	expected.pluginData.version = 1;
 
 	assert.deepEqual(savedData, [expected]);

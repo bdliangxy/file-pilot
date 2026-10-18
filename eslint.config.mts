@@ -2,6 +2,7 @@ import obsidianmd from 'eslint-plugin-obsidianmd';
 import globals from 'globals';
 import { globalIgnores, defineConfig } from 'eslint/config';
 
+
 export default defineConfig(
 	globalIgnores([
 		'node_modules',
@@ -30,4 +31,11 @@ export default defineConfig(
 		},
 	},
 	...obsidianmd.configs.recommended,
+	// Allow globalThis when mocking browser globals in Node.js tests.
+	{
+		files: ['tests/**/*.mjs'],
+		rules: {
+			'obsidianmd/no-global-this': 'off',
+		},
+	},
 );
