@@ -40,6 +40,7 @@ test('scans, imports, and persists records', async () => {
 		async (records) => {
 			persistedBatches.push(records);
 		},
+		() => [],
 	);
 
 	const result = await service.syncFiles(scope);
@@ -58,6 +59,47 @@ test('scans, imports, and persists records', async () => {
 	);
 });
 
+test('repeated scans reuse existing records without creating duplicate Shadow Notes', async () => {
+	const scope = makeScope();
+	const scannedFiles = [
+		makeScannedFile('a.pdf', { nativeIdentity: '1:1' }),
+		makeScannedFile('folder/b.txt', { nativeIdentity: '1:2' }),
+	];
+	let scanCount = 0;
+	let persistCount = 0;
+	const storedRecords = [];
+	const scanner = {
+		async scan() {
+			scanCount += 1;
+			return scannedFiles;
+		},
+	};
+	const shadowNoteService = createFakeShadowNoteService();
+	const service = new FileSyncService(
+		scanner,
+		shadowNoteService,
+		async (records) => {
+			persistCount += 1;
+			storedRecords.push(...records);
+		},
+		() => structuredClone(storedRecords),
+	);
+
+	const firstResult = await service.syncFiles(scope);
+	const firstRecords = structuredClone(storedRecords);
+	const firstNotes = structuredClone(shadowNoteService.createdNotes);
+
+	const secondResult = await service.syncFiles(scope);
+
+	assert.equal(scanCount, 2);
+	assert.equal(firstResult.importedCount, 2);
+	assert.equal(secondResult.importedCount, 0);
+	assert.equal(persistCount, 1);
+	assert.deepEqual(storedRecords, firstRecords);
+	assert.deepEqual(shadowNoteService.createdNotes, firstNotes);
+	assert.equal(shadowNoteService.requestedPaths.length, 2);
+});
+
 test('rejects an empty scan root before scanning', async () => {
 	let scanCalled = false;
 	let persistCalled = false;
@@ -73,6 +115,7 @@ test('rejects an empty scan root before scanning', async () => {
 		async () => {
 			persistCalled = true;
 		},
+		() => [],
 	);
 
 	await assert.rejects(
@@ -96,6 +139,7 @@ test('does not persist when scanning fails', async () => {
 		async () => {
 			persistCalled = true;
 		},
+		() => [],
 	);
 
 	await assert.rejects(
@@ -117,6 +161,7 @@ test('propagates persistence failures', async () => {
 		async () => {
 			throw new Error('save failed');
 		},
+		() => [],
 	);
 
 	await assert.rejects(
@@ -138,6 +183,7 @@ test('rejects a concurrent sync while one is already running', async () => {
 		scanner,
 		createFakeShadowNoteService(),
 		async () => {},
+		() => [],
 	);
 
 	const firstSync = service.syncFiles(makeScope());
@@ -166,6 +212,7 @@ test('allows retry after a failed sync', async () => {
 		scanner,
 		createFakeShadowNoteService(),
 		async () => {},
+		() => [],
 	);
 
 	await assert.rejects(

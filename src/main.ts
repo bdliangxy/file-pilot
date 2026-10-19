@@ -28,6 +28,7 @@ export default class FilePilotPlugin extends Plugin {
 			new FileScanner(),
 			new ShadowNoteService(this.app),
 			(records) => this.stateService.addFileRecords(records),
+			() => this.stateService.getFileRecords(),
 		);
 
 		// Register settings.

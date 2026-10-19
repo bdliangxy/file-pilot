@@ -49,6 +49,11 @@ export class PluginStateService {
 	getFileScope(): FileScope {
 		return structuredClone(this.getData().settingData.fileScope);
 	}
+	getFileRecords(): FileRecord[] {
+		return structuredClone(
+			this.getData().pluginData.fileRecords
+		);
+	}
 	getRootPath(): string {
 		return this.getData().settingData.fileScope.rootPath;
 	}
@@ -68,9 +73,29 @@ export class PluginStateService {
 		// two cloned copies aims to keep the in-memory state unchanged if persistence fails.
 		const nextData = structuredClone(this.getData());
 
-		nextData.pluginData.fileRecords.push(
-			...structuredClone(records),
+		const fileRecords = nextData.pluginData.fileRecords;
+		// Build indexes from existing records.
+		const existingIds = new Set(
+			fileRecords.map(record => record.id)
 		);
+		const existingPaths = new Set(
+			fileRecords.map(record => record.path)
+		);
+
+		for (const record of records) {
+			if (existingIds.has(record.id)) {
+				throw new Error("Duplicate FileRecord ID");
+			}
+
+			if (existingPaths.has(record.path)) {
+				throw new Error("Duplicate FileRecord path");
+			}
+
+			existingIds.add(record.id);
+			existingPaths.add(record.path);
+		}
+
+		fileRecords.push(...structuredClone(records));
 
 		await this.save(nextData);
 	}

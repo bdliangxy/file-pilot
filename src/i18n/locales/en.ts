@@ -3,7 +3,7 @@ export const en = {
 	// basic words
 	pluginTitle: pluginName,
 	pluginLoaded: `${pluginName} loaded`,
-	filePilotRibbonTooltip: `Open ${pluginName} monitor panel`,
+	filePilotRibbonTooltip: `Open ${pluginName} management panel`,
 	restorDefault: `Restore defaults`,
 	clear: `Clear`,
 	import: `Import`,
@@ -61,6 +61,7 @@ export const en = {
 	oneWayScan: `One-way scan`,
 	scanRootNotConfigured: `Please add a folder in the plugin settings page first`,
 	scanCompleted: `Imported {count} files`,
+	noNewImportedFile: 'No imported File',
 	SameNameFile: `The Shadow Note for file {fileName} has a naming conflict. ${pluginName} has appended a UUID to the end. It is strongly recommended that you manually rename the file.`,
 	scanFailed: `Scan failed`,
 	scanning: `scanning folder`,

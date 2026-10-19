@@ -3,7 +3,7 @@ const pluginName = 'File Pilot'
 export const zh = {
 	pluginTitle: pluginName,
 	pluginLoaded: `${pluginName} 已加载`,
-	filePilotRibbonTooltip: `打开${pluginName}监控面板`,
+	filePilotRibbonTooltip: `打开${pluginName}管理面板`,
 	restorDefault: `恢复默认`,
 	clear: '清空',
 	import: '导入',
@@ -60,6 +60,7 @@ export const zh = {
 	oneWayScan: `单向扫描`,
 	scanRootNotConfigured: `请先在插件设置页添加文件夹`,
 	scanCompleted: `已导入 {count} 个文件`,
+	noNewImportedFile: '无新文件导入',
 	SameNameFile: `文件 {fileName} 的影子笔记存在命名冲突，${pluginName}已在影子笔记后面添加UUID，强烈建议手动修改文件名`,
 	scanFailed: `扫描失败`,
 	scanning: `扫描文件夹中`,

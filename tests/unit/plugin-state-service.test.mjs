@@ -53,6 +53,28 @@ test('isolates state from source objects and returned file scopes', async () => 
 	assert.deepEqual(service.getFileScope().ignorePatterns, []);
 });
 
+test('getFileRecords returns an isolated snapshot without saving', async () => {
+	const originalRecords = [
+		makeFileRecord('file-1', { path: 'docs/report.pdf' }),
+		makeFileRecord('file-2', { path: 'images/photo.png' }),
+	];
+	const { service, savedData } = createPluginStateServiceTestContext(
+		PluginStateService,
+		makePluginData({ fileRecords: originalRecords }),
+	);
+	await service.load();
+
+	const returnedRecords = service.getFileRecords();
+	assert.deepEqual(returnedRecords, originalRecords);
+
+	returnedRecords[0].path = 'changed/by/ui.pdf';
+	returnedRecords.push(makeFileRecord('file-3', { path: 'extra.txt' }));
+
+	assert.deepEqual(service.getFileRecords(), originalRecords);
+	assert.equal(service.getFileRecordCount(), 2);
+	assert.equal(savedData.length, 0);
+});
+
 test('adds records and persists the updated state', async () => {
 	const { service, savedData } = createPluginStateServiceTestContext(PluginStateService,);
 
@@ -67,6 +89,27 @@ test('adds records and persists the updated state', async () => {
 
 	record.path = 'changed after saving';
 	assert.equal(savedData[0].pluginData.fileRecords[0].path, 'docs/report.pdf');
+});
+
+test('rejects an already managed path without changing stored records', async () => {
+	const existingRecord = makeFileRecord('file-1', { path: 'docs/report.pdf' });
+	const { service, savedData } = createPluginStateServiceTestContext(
+		PluginStateService,
+		makePluginData({ fileRecords: [existingRecord] }),
+	);
+	await service.load();
+
+	const duplicatePathRecord = makeFileRecord('file-2', {
+		path: 'docs/report.pdf',
+	});
+
+	await assert.rejects(
+		service.addFileRecords([duplicatePathRecord]),
+		/Duplicate FileRecord path/,
+	);
+
+	assert.deepEqual(service.getFileRecords(), [existingRecord]);
+	assert.equal(savedData.length, 0);
 });
 
 test('adding an empty batch does not persist anything', async () => {

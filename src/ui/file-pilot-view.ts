@@ -63,7 +63,12 @@ export class FilePilotView extends ItemView {
 
 						try {
 							const result = await this.filePilot.syncFiles();
-							new Notice(t('scanCompleted', { count: result.importedCount, }));
+							if (result.importedCount > 0) {
+								new Notice(t('scanCompleted', { count: result.importedCount, }));
+							} else {
+								new Notice(t('noNewImportedFile'));
+							}
+
 						} catch (error) {
 							if (error instanceof FilePilotError) {
 								switch (error.code) {

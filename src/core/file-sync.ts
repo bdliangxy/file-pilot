@@ -16,6 +16,7 @@ export class FileSyncService {
 		private readonly fileScanner: FileScanner,
 		private readonly shadowNoteService: ShadowNoteService,
 		private readonly addFileRecords: (record: FileRecord[]) => Promise<void>,
+		private readonly getFileRecords: () => FileRecord[],
 	) { }
 
 	async syncFiles(
@@ -40,13 +41,29 @@ export class FileSyncService {
 		try {
 			const scannedFiles =
 				await this.fileScanner.scan(fileScope);
+			const existingRecords = this.getFileRecords();
+			const knownPaths = new Set(
+				existingRecords.map(record => record.path)
+			);
+
+			const filesToImport = scannedFiles.filter(file => {
+				if (knownPaths.has(file.path)) {
+					return false;
+				}
+
+				knownPaths.add(file.path);
+				return true;
+			});
 
 			const newRecords = await importScannedFiles(
-				scannedFiles,
+				filesToImport,
 				this.shadowNoteService,
 			);
 
-			await this.addFileRecords(newRecords);
+			if (newRecords.length > 0) {
+				await this.addFileRecords(newRecords);
+			}
+
 
 			return {
 				importedCount: newRecords.length,
