@@ -170,3 +170,77 @@
 	outline: none;
 	box-shadow: none;
 }
+
+/* Overview section. */
+.file-pilot-overview {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-rows: auto auto;
+	column-gap: 12px;
+	align-items: center;
+
+	padding: 12px;
+	margin-bottom: 16px;
+
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-primary);
+}
+
+/* Let Setting's children participate in the overview grid. */
+.file-pilot-overview>.setting-item {
+	display: contents;
+}
+
+/* Root directory name and path. */
+.file-pilot-overview .setting-item-info {
+	grid-column: 1;
+	grid-row: 1;
+	min-width: 0;
+	background: transparent;
+}
+
+/* Keep long paths inside the information column. */
+.file-pilot-overview .setting-item-description {
+	overflow-wrap: anywhere;
+}
+
+/* Center the scan button across both rows. */
+.file-pilot-overview .setting-item-control {
+	grid-column: 2;
+	grid-row: 1 / 3;
+	align-self: center;
+	justify-self: end;
+	background: transparent;
+}
+
+/* Managed file count below the root directory. */
+.file-pilot-managed-count {
+	grid-column: 1;
+	grid-row: 2;
+
+	margin-top: 8px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+/* Files section. */
+.file-pilot-files-title {
+	margin: 0 0 8px;
+	font-size: var(--font-ui-medium);
+}
+
+/* Basic file list item. */
+.file-pilot-file-name {
+	padding: 8px 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Empty list message. */
+.file-pilot-file-empty {
+	padding: 12px 0;
+	color: var(--text-muted);
+}

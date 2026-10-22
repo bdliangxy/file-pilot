@@ -65,4 +65,7 @@ export const zh = {
 	scanFailed: `扫描失败`,
 	scanning: `扫描文件夹中`,
 	syncAlreadyInProgress: `正在同步中`,
+	fileListTitle: '文件',
+	managedFileCount: '已管理 {count} 个文件',
+	emptyFileList: '项目文件夹中暂无文件',
 } satisfies Record<keyof typeof en, string>;

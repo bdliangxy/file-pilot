@@ -66,5 +66,8 @@ export const en = {
 	scanFailed: `Scan failed`,
 	scanning: `scanning folder`,
 	syncAlreadyInProgress: `Sync already in progress`,
+	fileListTitle: 'Files',
+	managedFileCount: '{count} managed files',
+	emptyFileList: 'No managed files yet in project directory',
 
 } as const;
