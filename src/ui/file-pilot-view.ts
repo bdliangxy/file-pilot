@@ -1,10 +1,19 @@
-import { ItemView, Notice, Setting, WorkspaceLeaf } from 'obsidian';
+import {
+	ItemView,
+	Notice,
+	Setting,
+	WorkspaceLeaf,
+} from 'obsidian';
 
 import type FilePilotPlugin from '../main';
 import { t } from '../i18n';
 import { FilePilotError } from '../error';
 import type { FileRecord } from '../core/file-interface';
-import { getFullName } from '../utils/path-utils';
+import {
+	getFullName,
+	getAbsoluteFilePath,
+} from '../utils/path-utils';
+import { formatFileSize } from '../utils/file-utils';
 
 export const VIEW_TYPE = 'file-pilot-view';
 
@@ -14,7 +23,7 @@ export class FilePilotView extends ItemView {
 	private rootSetting: Setting | null = null;
 
 	private fileCountEl: HTMLDivElement | null = null;
-	private fileListEl: HTMLDivElement | null = null;
+	private filesSectionEl: HTMLDivElement | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -45,6 +54,7 @@ export class FilePilotView extends ItemView {
 	async onOpen(): Promise<void> {
 		const { contentEl } = this;
 		contentEl.empty();
+		contentEl.addClass('file-pilot-view-content');
 		// Create the overview section.
 		const overviewSection = contentEl.createDiv({
 			cls: 'file-pilot-overview',
@@ -107,19 +117,9 @@ export class FilePilotView extends ItemView {
 
 		// The search section will be inserted here in the future.
 
-		// Create the files section.
-		const filesSection = contentEl.createDiv({
+		// Create the scrollable files section.
+		this.filesSectionEl = contentEl.createDiv({
 			cls: 'file-pilot-files-section',
-		});
-
-		filesSection.createEl('h3', {
-			text: t('fileListTitle'),
-			cls: 'file-pilot-files-title',
-		});
-
-		// Create the file list container.
-		this.fileListEl = filesSection.createDiv({
-			cls: 'file-pilot-file-list',
 		});
 
 		// Render the initial file list.
@@ -129,12 +129,13 @@ export class FilePilotView extends ItemView {
 	async onClose(): Promise<void> {
 		this.rootSetting = null;
 		this.fileCountEl = null;
-		this.fileListEl = null;
+		this.filesSectionEl = null;
+		this.contentEl.removeClass('file-pilot-view-content');
 		this.contentEl.empty();
 	}
 
 	private refreshFileList(): void {
-		if (!this.fileCountEl || !this.fileListEl) {
+		if (!this.fileCountEl || !this.filesSectionEl) {
 			return;
 		}
 
@@ -154,11 +155,12 @@ export class FilePilotView extends ItemView {
 	}
 
 	private renderFileList(records: FileRecord[]): void {
-		const listEl = this.fileListEl;
+		const listEl = this.filesSectionEl;
 
 		if (!listEl) {
 			return;
 		}
+		const previousScrollTop = listEl.scrollTop;
 
 		// Clear previously rendered items.
 		listEl.empty();
@@ -170,13 +172,64 @@ export class FilePilotView extends ItemView {
 			});
 			return;
 		}
-
-		// Render file names.
+		const rootPath = this.filePilot.stateService.getRootPath();
+		// // Render file items.
 		for (const record of records) {
-			listEl.createDiv({
-				cls: 'file-pilot-file-name',
-				text: getFullName(record.path),
-			});
+			this.renderFileItem(listEl, record, rootPath);
 		}
+		listEl.scrollTop = previousScrollTop;
 	}
+
+
+	private renderFileItem(
+		listEl: HTMLDivElement,
+		record: FileRecord,
+		rootPath: string,
+	): void {
+		const absolutePath = getAbsoluteFilePath(
+			rootPath,
+			record.path,
+		);
+
+		// Create the main file item container.
+		const itemEl = listEl.createDiv({
+			cls: 'file-pilot-file-item',
+		});
+
+		// Left: name and secondary text.
+		const infoEl = itemEl.createDiv({
+			cls: 'file-pilot-file-info',
+		});
+
+		infoEl.createDiv({
+			cls: 'file-pilot-file-name',
+			text: getFullName(record.path),
+		});
+
+		infoEl.createDiv({
+			cls: 'file-pilot-file-path',
+			text: absolutePath,
+		});
+
+		// Right: file size and status.
+		const metaEl = itemEl.createDiv({
+			cls: 'file-pilot-file-meta',
+		});
+
+		metaEl.createDiv({
+			cls: 'file-pilot-file-size',
+			text: formatFileSize(record.size),
+		});
+
+		const statusText =
+			record.status === 'available'
+				? t('fileStatusAvailable')
+				: t('fileStatusMissing');
+
+		metaEl.createDiv({
+			cls: `file-pilot-file-status file-pilot-status-${record.status}`,
+			text: statusText,
+		});
+	}
+
 }

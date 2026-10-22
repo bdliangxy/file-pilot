@@ -6,6 +6,6 @@
 	},
 	"include": [
 		"unit/**/*.mjs",
-		"mocks/**/*.mjs"
+		"fakes/**/*.mjs"
 	]
 }

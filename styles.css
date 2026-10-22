@@ -185,6 +185,8 @@
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
 	background: var(--background-primary);
+
+	flex-shrink: 0;
 }
 
 /* Let Setting's children participate in the overview grid. */
@@ -224,23 +226,103 @@
 	font-size: var(--font-ui-smaller);
 }
 
-/* Files section. */
-.file-pilot-files-title {
-	margin: 0 0 8px;
-	font-size: var(--font-ui-medium);
+/* Main file item. */
+.file-pilot-file-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	padding: 10px 6px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
 }
 
-/* Basic file list item. */
+/* Highlight the item on hover. */
+.file-pilot-file-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+/* Center information area. */
+.file-pilot-file-info {
+	display: flex;
+	flex: 1 1 0;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+/* File name. */
 .file-pilot-file-name {
-	padding: 8px 0;
-	border-bottom: 1px solid var(--background-modifier-border);
+	color: var(--text-normal);
+	font-size: var(--font-ui-medium);
+	font-weight: 700;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+/* Absolute path, preserving the trailing part. */
+.file-pilot-file-path {
+	min-width: 0;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	direction: rtl;
+	text-align: left;
+}
+
+/* Right metadata area. */
+.file-pilot-file-meta {
+	display: flex;
+	flex: 0 0 auto;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 4px;
+	min-width: 74px;
+	white-space: nowrap;
+}
+
+/* File size. */
+.file-pilot-file-size {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+}
+
+/* File status. */
+.file-pilot-file-status {
+	font-size: var(--font-ui-smaller);
+}
+
+.file-pilot-status-available {
+	color: var(--text-success);
+}
+
+.file-pilot-status-missing {
+	color: var(--text-error);
 }
 
 /* Empty list message. */
 .file-pilot-file-empty {
 	padding: 12px 0;
 	color: var(--text-muted);
+}
+
+/* Main view layout. */
+.file-pilot-view-content {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* Scrollable files section. */
+.file-pilot-files-section {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
 }
