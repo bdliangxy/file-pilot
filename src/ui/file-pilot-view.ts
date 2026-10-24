@@ -3,6 +3,7 @@ import {
 	Notice,
 	Setting,
 	WorkspaceLeaf,
+	type EventRef,
 } from 'obsidian';
 
 import type FilePilotPlugin from '../main';
@@ -16,6 +17,12 @@ import {
 import { formatFileSize } from '../utils/file-utils';
 
 export const VIEW_TYPE = 'file-pilot-view';
+interface FileItemState {
+	record: FileRecord;
+	secondaryEl: HTMLDivElement;
+	absolutePath: string;
+	summaryUpdateVersion: number;//an asynchronous request version number, used to ensure that only the most recently triggered refresh is allowed to modify the UI
+}
 
 export class FilePilotView extends ItemView {
 	navigation = false;// Keep this view as a fixed panel rather than a navigable document view.
@@ -24,6 +31,11 @@ export class FilePilotView extends ItemView {
 
 	private fileCountEl: HTMLDivElement | null = null;
 	private filesSectionEl: HTMLDivElement | null = null;
+	// Maps Shadow Note paths to their corresponding File Item UI elements.
+	private readonly mapNotePathItemState =
+		new Map<string, FileItemState>();
+	// Holds the MetadataCache event reference for automatic summary updates.
+	private summaryChangeRef: EventRef | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -122,11 +134,33 @@ export class FilePilotView extends ItemView {
 			cls: 'file-pilot-files-section',
 		});
 
+		// Listen for updates to indexed Shadow Notes.
+		if (!this.summaryChangeRef) {
+			this.summaryChangeRef =
+				this.app.metadataCache.on('changed', (file) => {
+					const item = this.mapNotePathItemState.get(file.path);
+
+					if (!item) {
+						return;
+					}
+
+					void this.updateFileSummary(item);
+				});
+		}
+
 		// Render the initial file list.
 		this.refreshFileList();
 	}
 
 	async onClose(): Promise<void> {
+		if (this.summaryChangeRef) {
+			this.app.metadataCache.offref(
+				this.summaryChangeRef,
+			);
+			this.summaryChangeRef = null;
+		}
+
+		this.mapNotePathItemState.clear();
 		this.rootSetting = null;
 		this.fileCountEl = null;
 		this.filesSectionEl = null;
@@ -161,6 +195,9 @@ export class FilePilotView extends ItemView {
 			return;
 		}
 		const previousScrollTop = listEl.scrollTop;
+
+		// Discard references to previously rendered items.
+		this.mapNotePathItemState.clear();
 
 		// Clear previously rendered items.
 		listEl.empty();
@@ -206,10 +243,24 @@ export class FilePilotView extends ItemView {
 			text: getFullName(record.path),
 		});
 
-		infoEl.createDiv({
-			cls: 'file-pilot-file-path',
+		const secondaryEl = infoEl.createDiv({
+			cls: 'file-pilot-file-secondary file-pilot-file-path',
 			text: absolutePath,
 		});
+
+		const fileItemState: FileItemState = {
+			record,
+			secondaryEl,
+			absolutePath,
+			summaryUpdateVersion: 0,
+		};
+
+		this.mapNotePathItemState.set(
+			record.shadowNotePath,
+			fileItemState,
+		);
+
+		void this.updateFileSummary(fileItemState);
 
 		// Right: file size and status.
 		const metaEl = itemEl.createDiv({
@@ -230,6 +281,55 @@ export class FilePilotView extends ItemView {
 			cls: `file-pilot-file-status file-pilot-status-${record.status}`,
 			text: statusText,
 		});
+	}
+
+	private async updateFileSummary(
+		item: FileItemState,
+	): Promise<void> {
+		const summaryUpdateVersion = ++item.summaryUpdateVersion;
+
+		try {
+			const summary =
+				await this.filePilot.shadowNoteService
+					.getFileSummary(item.record);
+
+			// Ignore outdated asynchronous results.
+			if (
+				summaryUpdateVersion !== item.summaryUpdateVersion ||
+				!item.secondaryEl.isConnected ||
+				this.mapNotePathItemState.get(
+					item.record.shadowNotePath
+				) !== item
+			) {
+				return;
+			}
+
+			if (summary) {
+				item.secondaryEl.removeClass(
+					'file-pilot-file-path',
+				);
+				item.secondaryEl.addClass(
+					'file-pilot-file-summary',
+				);
+				item.secondaryEl.setText(summary);
+			} else {
+				item.secondaryEl.removeClass(
+					'file-pilot-file-summary',
+				);
+				item.secondaryEl.addClass(
+					'file-pilot-file-path',
+				);
+				item.secondaryEl.setText(
+					item.absolutePath,
+				);
+			}
+		} catch (error) {
+			console.error(
+				'File Pilot failed to update file summary:',
+				item.record.shadowNotePath,
+				error,
+			);
+		}
 	}
 
 }

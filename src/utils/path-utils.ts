@@ -44,24 +44,3 @@ export function getFullName(relativePath: string): string {
 	return path.posix.basename(relativePath);
 }
 
-export function getShadowNoteFileName(
-	relativePath: string,
-	parentCount: number,
-	id?: string,
-): string | null {
-	if (id !== undefined) {
-		return `${getFullName(relativePath)}-${id}.md`;
-	}
-
-	const parts = relativePath.split('/');
-
-	if (parentCount >= parts.length) {
-		return null;
-	}
-
-	const name = parts
-		.slice(-(parentCount + 1))
-		.join('_');
-
-	return `${name}.md`;
-}

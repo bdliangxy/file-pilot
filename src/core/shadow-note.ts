@@ -1,6 +1,10 @@
 import { App, TFile } from "obsidian";
 import type { FileRecord } from "./file-interface";
-import { getShadowNoteFileName, getFullName } from "../utils/path-utils";
+import { getFullName } from "../utils/path-utils";
+import {
+	generateShadowNoteName,
+	extractFirstParagraphFromHeading,
+} from "../utils/shadow-note-utils";
 import { Notice } from 'obsidian';
 import { t } from '../i18n';
 
@@ -21,13 +25,13 @@ export class ShadowNoteService {
 		fileId: string,
 		parentCount = 0,
 	): string {
-		const fileName = getShadowNoteFileName(
+		const fileName = generateShadowNoteName(
 			relativePath,
 			parentCount,
 		);
 
 		if (fileName === null) {
-			const fallbackName = getShadowNoteFileName(
+			const fallbackName = generateShadowNoteName(
 				relativePath,
 				parentCount,
 				fileId,
@@ -69,11 +73,36 @@ export class ShadowNoteService {
 		}
 
 		const content =
-			`---\nfile-id: ${fileId}\n---\n`;
+			`---\nfile-id: ${fileId}\n---\n\n## File Summary\n\n`;
 
 		await this.app.vault.create(
 			shadowNotePath,
 			content,
+		);
+	}
+
+	async getFileSummary(
+		record: FileRecord,
+	): Promise<string | null> {
+		const note = this.getShadowNote(record);
+
+		if (!note) {
+			return null;
+		}
+
+		const headings =
+			this.app.metadataCache.getFileCache(note)?.headings;
+
+		if (!headings) {
+			return null;
+		}
+
+		const content = await this.app.vault.cachedRead(note);
+
+		return extractFirstParagraphFromHeading(
+			content,
+			headings,
+			'File Summary',
 		);
 	}
 }

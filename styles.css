@@ -261,16 +261,29 @@
 	text-overflow: ellipsis;
 }
 
-/* Absolute path, preserving the trailing part. */
-.file-pilot-file-path {
+/* Shared secondary text style. */
+.file-pilot-file-secondary {
 	min-width: 0;
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+/* Preserve the trailing part of long absolute paths. */
+.file-pilot-file-path {
 	direction: rtl;
 	text-align: left;
+	color: var(--text-faint);
+}
+
+/* Display summaries in normal reading order. */
+.file-pilot-file-summary {
+	direction: ltr;
+	text-align: left;
+	color: var(--text-normal);
+	font-weight: 500;
 }
 
 /* Right metadata area. */
@@ -287,7 +300,7 @@
 /* File size. */
 .file-pilot-file-size {
 	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
+	font-size: calc(var(--font-ui-smaller) - 2px);
 	font-variant-numeric: tabular-nums;
 }
 

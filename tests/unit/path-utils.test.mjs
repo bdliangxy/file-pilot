@@ -10,7 +10,6 @@ const {
 	getAbsoluteFilePath,
 	getFileExtension,
 	getFileBaseName,
-	getShadowNoteFileName,
 } = await jiti.import('../../src/utils/path-utils.ts');
 
 test('converts paths to root-relative forward-slash form', () => {
@@ -30,11 +29,3 @@ test('extracts file names and extensions', () => {
 	assert.equal(getFileExtension('.gitignore'), null);
 });
 
-test('expands Shadow Note names using parent folders and stops at the root', () => {
-	const relativePath = 'projects/docs/report.pdf';
-
-	assert.equal(getShadowNoteFileName(relativePath, 0), 'report.pdf.md');
-	assert.equal(getShadowNoteFileName(relativePath, 1), 'docs_report.pdf.md');
-	assert.equal(getShadowNoteFileName(relativePath, 2), 'projects_docs_report.pdf.md');
-	assert.equal(getShadowNoteFileName(relativePath, 3), null);
-});

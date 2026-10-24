@@ -16,6 +16,7 @@ export default class FilePilotPlugin extends Plugin {
 		saveData: (data) => this.saveData(data),
 	});
 	private fileSyncService!: FileSyncService;
+	public shadowNoteService!: ShadowNoteService;
 
 
 	async onload(): Promise<void> {
@@ -23,10 +24,11 @@ export default class FilePilotPlugin extends Plugin {
 		// Load persisted plugin data.
 		await this.stateService.load();
 
+		this.shadowNoteService = new ShadowNoteService(this.app);
 		// Initialize file synchronization.
 		this.fileSyncService = new FileSyncService(
 			new FileScanner(),
-			new ShadowNoteService(this.app),
+			this.shadowNoteService,
 			(records) => this.stateService.addFileRecords(records),
 			() => this.stateService.getFileRecords(),
 		);
