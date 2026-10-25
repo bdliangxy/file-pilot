@@ -143,6 +143,9 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			if (result.updated.includes('rootPath')) {
 				this.filePilot.refreshViewRootPath();
 			}
+			if (result.updated.includes('ignorePatterns')) {
+				this.filePilot.refreshViewFileList();
+			}
 			this.showSettingsFeedback({
 				type: 'result',
 				result,

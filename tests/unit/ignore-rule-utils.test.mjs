@@ -11,6 +11,7 @@ const {
     classifyIgnorePattern,
     escapeGitignorePath,
     createSelectedIgnorePattern,
+    getDisplayStatus,
 } = await jiti.import('../../src/utils/ignore-rule-utils.ts');
 
 test('extension validation accepts simple and compound suffixes within the limit', () => {
@@ -80,4 +81,26 @@ test('generated rules ignore selected literals but not similarly named files', (
     assert.equal(matcher.ignores('folder/data[1]?.txt'), true);
     assert.equal(matcher.ignores('folder/dataA1X.txt'), false);
     assert.equal(matcher.ignores('other/data[1]?.txt'), false);
+});
+
+
+test('display status prioritizes ignored rules without mutating FileRecord', () => {
+    const record = { path: 'reports/a.pdf', status: 'missing' };
+    const original = structuredClone(record);
+    const ignored = ignore().add(['/reports/']);
+    assert.equal(getDisplayStatus(record, ignored), 'ignored');
+    assert.deepEqual(record, original);
+    assert.equal(getDisplayStatus(record, ignore()), 'missing');
+});
+
+test('display status respects filename, extension, and negation rules', () => {
+    const matcher = ignore().add(['*.pdf', '!reports/keep.pdf', '/private/']);
+    for (const [path, status, expected] of [
+        ['reports/a.pdf', 'available', 'ignored'],
+        ['reports/keep.pdf', 'available', 'available'],
+        ['other/readme.txt', 'missing', 'missing'],
+        ['private/report.txt', 'missing', 'ignored'],
+    ]) {
+        assert.equal(getDisplayStatus({ path, status }, matcher), expected, path);
+    }
 });

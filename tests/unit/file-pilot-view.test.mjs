@@ -22,6 +22,7 @@ function setup(summaryReader = async () => null) {
     const record = makeFileRecord('file-1', {
         shadowNotePath: 'ShadowNotes/report.md',
     });
+    let ignorePatterns = [];
     const callbacks = new Map();
     let subscribed = 0;
     let unsubscribed = 0;
@@ -44,6 +45,7 @@ function setup(summaryReader = async () => null) {
         stateService: {
             getRootPath: () => 'C:/files',
             getFileRecords: () => [record],
+            getIgnorePatterns: () => [...ignorePatterns],
         },
         shadowNoteService: {
             getFileSummary: (received) => {
@@ -71,6 +73,7 @@ function setup(summaryReader = async () => null) {
     return {
         view, record, find,
         emit: (path) => callbacks.get('changed')?.({ path }),
+        setIgnorePatterns: (patterns) => { ignorePatterns = [...patterns]; },
         get reads() { return reads; },
         get subscribed() { return subscribed; },
         get unsubscribed() { return unsubscribed; },
@@ -144,4 +147,53 @@ test('closes and reopens without accumulating metadata listeners', async () => {
     assert.equal(ui.subscribed, 2);
     await ui.view.onClose();
     assert.equal(ui.unsubscribed, 2);
+});
+
+
+test('opening the view immediately shows ignored status from saved rules', async () => {
+    const ui = setup();
+    ui.setIgnorePatterns(['/docs/report.pdf']);
+    await ui.view.onOpen();
+    const status = ui.find('file-pilot-file-status');
+    assert.equal(status.text, 'Ignored');
+    assert.ok(status.classes.has('file-pilot-status-ignored'));
+    assert.equal(ui.record.status, 'available');
+    await ui.view.onClose();
+});
+
+test('refreshing the view switches ignored status back without changing FileRecord', async () => {
+    const ui = setup();
+    await ui.view.onOpen();
+    const initial = ui.find('file-pilot-file-status');
+    assert.equal(initial.text, 'Normal');
+
+    ui.setIgnorePatterns(['*.pdf']);
+    ui.view.refreshFileList();
+    const ignored = ui.find('file-pilot-file-status');
+    assert.equal(ignored.text, 'Ignored');
+    assert.ok(ignored.classes.has('file-pilot-status-ignored'));
+
+    ui.setIgnorePatterns([]);
+    ui.view.refreshFileList();
+    const restored = ui.find('file-pilot-file-status');
+    assert.equal(restored.text, 'Normal');
+    assert.ok(restored.classes.has('file-pilot-status-available'));
+    assert.equal(ui.record.status, 'available');
+    await ui.view.onClose();
+});
+
+test('refresh keeps missing status when a matching ignore rule is removed', async () => {
+    const ui = setup();
+    ui.record.status = 'missing';
+    ui.setIgnorePatterns(['/docs/']);
+    await ui.view.onOpen();
+    assert.equal(ui.find('file-pilot-file-status').text, 'Ignored');
+
+    ui.setIgnorePatterns([]);
+    ui.view.refreshFileList();
+    const status = ui.find('file-pilot-file-status');
+    assert.equal(status.text, 'Missing');
+    assert.ok(status.classes.has('file-pilot-status-missing'));
+    assert.equal(ui.record.status, 'missing');
+    await ui.view.onClose();
 });

@@ -398,15 +398,15 @@ export class IgnoreRulesSettingSection {
 			t('ignoreExtensionInput'),
 		);
 
-		input.addEventListener('keydown', (event) => {
-			if (event.key !== 'Enter' || event.isComposing) {
+		const commitExtension = (refocus: boolean): void => {
+			const extension = input.value;
+
+			if (extension === '') {
 				return;
 			}
 
-			event.preventDefault();
-
-			const extension = input.value;
 			input.value = '';
+
 			if (!inputIsValidExtension(extension)) {
 				new Notice(t('ignoreExtensionInvalid'));
 				return;
@@ -434,12 +434,27 @@ export class IgnoreRulesSettingSection {
 			// Rebuild the pills, including a fresh empty editor.
 			this.renderIgnoreRuleItems(container, 'extensions');
 
-			// Move focus to the newly created input.
-			container
-				.querySelector<HTMLInputElement>(
-					'.file-pilot-ignore-extension-input',
-				)
-				?.focus();
+			// Keep focus only when submitted with Enter.
+			if (refocus) {
+				container
+					.querySelector<HTMLInputElement>(
+						'.file-pilot-ignore-extension-input',
+					)
+					?.focus();
+			}
+		};
+
+		input.addEventListener('keydown', (event) => {
+			if (event.key !== 'Enter' || event.isComposing) {
+				return;
+			}
+
+			event.preventDefault();
+			commitExtension(true);
+		});
+
+		input.addEventListener('blur', () => {
+			commitExtension(false);
 		});
 	}
 

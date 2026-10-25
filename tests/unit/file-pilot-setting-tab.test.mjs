@@ -31,9 +31,11 @@ async function setup(data = makePluginData()) {
     await service.load();
 
     let refreshes = 0;
+    let listRefreshes = 0;
     const plugin = {
         stateService: service,
         refreshViewRootPath() { refreshes++; },
+        refreshViewFileList() { listRefreshes++; },
     };
     const tab = new FilePilotSettingTab({}, plugin);
     const definitions = tab.getSettingDefinitions();
@@ -53,6 +55,7 @@ async function setup(data = makePluginData()) {
         browse: findButton(settings[0], 'Browse'),
         save: findButton(settings[2], 'Save settings'),
         get refreshes() { return refreshes; },
+        get listRefreshes() { return listRefreshes; },
     };
 }
 
@@ -93,6 +96,7 @@ test('Enter saves a valid root without saving the unsaved Ignore draft', async (
     assert.equal(ui.rootInput.getValue(), directory);
     assert.deepEqual(ui.service.getIgnorePatterns(), []);
     assert.equal(ui.refreshes, 1);
+    assert.equal(ui.listRefreshes, 0);
     assert.equal(ui.savedData.length, 1);
 });
 
@@ -177,6 +181,8 @@ test('Save settings commits the Ignore draft but restores a locked root', async 
     assert.deepEqual(ui.tab.getSettingDefinitions().length, 3);
     assert.equal(ui.ignoreInput.getValue(), '*.pdf\n*.log');
     assert.equal(ui.savedData.length, 1);
+    assert.equal(ui.refreshes, 0);
+    assert.equal(ui.listRefreshes, 1);
     assert.match(Notice.messages[0], /Some settings were saved/);
 });
 
@@ -246,4 +252,32 @@ test('an in-flight save does not replace edits typed after submission', async ()
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(input.getValue(), 'still editing');
+});
+
+
+test('saving changed ignore rules triggers one file-list refresh, not a root refresh', async () => {
+    const ui = await setup(makePluginData({ ignorePatterns: ['*.tmp'] }));
+    ui.ignoreInput.edit('*.pdf');
+    await ui.save.click();
+    assert.deepEqual(ui.service.getIgnorePatterns(), ['*.pdf']);
+    assert.equal(ui.listRefreshes, 1);
+    assert.equal(ui.refreshes, 0);
+
+    await ui.save.click();
+    assert.equal(ui.listRefreshes, 1);
+    assert.equal(ui.savedData.length, 1);
+
+    ui.ignoreInput.edit('');
+    await ui.save.click();
+    assert.deepEqual(ui.service.getIgnorePatterns(), []);
+    assert.equal(ui.listRefreshes, 2);
+});
+
+test('invalid root with unchanged ignore rules does not refresh either view field', async () => {
+    const ui = await setup(makePluginData({ ignorePatterns: ['*.pdf'] }));
+    ui.rootInput.setValue('relative/invalid');
+    await ui.save.click();
+    assert.equal(ui.refreshes, 0);
+    assert.equal(ui.listRefreshes, 0);
+    assert.equal(ui.savedData.length, 0);
 });

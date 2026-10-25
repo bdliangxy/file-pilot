@@ -70,5 +70,6 @@ export const en = {
 	emptyFileList: 'No managed files yet in project directory',
 	fileStatusAvailable: 'Normal',
 	fileStatusMissing: 'Missing',
+	fileStatusIgnored: 'Ignored',
 
 } as const;

@@ -317,6 +317,11 @@
 	color: var(--text-error);
 }
 
+/* Display ignored files in the theme's warning color. */
+.file-pilot-status-ignored {
+	color: var(--text-warning);
+}
+
 /* Empty list message. */
 .file-pilot-file-empty {
 	padding: 12px 0;

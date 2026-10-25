@@ -69,4 +69,5 @@ export const zh = {
 	emptyFileList: '项目文件夹中暂无文件',
 	fileStatusAvailable: '正常',
 	fileStatusMissing: '缺失',
+	fileStatusIgnored: '被忽略',
 } satisfies Record<keyof typeof en, string>;

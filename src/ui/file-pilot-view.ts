@@ -15,6 +15,12 @@ import {
 	getAbsoluteFilePath,
 } from '../utils/path-utils';
 import { formatFileSize } from '../utils/file-utils';
+import ignore from 'ignore';
+
+import {
+	getDisplayStatus,
+	type FileDisplayStatus,
+} from '../utils/ignore-rule-utils';
 
 export const VIEW_TYPE = 'file-pilot-view';
 interface FileItemState {
@@ -168,7 +174,7 @@ export class FilePilotView extends ItemView {
 		this.contentEl.empty();
 	}
 
-	private refreshFileList(): void {
+	refreshFileList(): void {
 		if (!this.fileCountEl || !this.filesSectionEl) {
 			return;
 		}
@@ -210,9 +216,22 @@ export class FilePilotView extends ItemView {
 			return;
 		}
 		const rootPath = this.filePilot.stateService.getRootPath();
+		const matcher = ignore().add(
+			this.filePilot.stateService.getIgnorePatterns(),
+		);
+
 		// // Render file items.
 		for (const record of records) {
-			this.renderFileItem(listEl, record, rootPath);
+			const displayStatus = getDisplayStatus(
+				record,
+				matcher,
+			);
+			this.renderFileItem(
+				listEl,
+				record,
+				rootPath,
+				displayStatus,
+			);
 		}
 		listEl.scrollTop = previousScrollTop;
 	}
@@ -222,6 +241,7 @@ export class FilePilotView extends ItemView {
 		listEl: HTMLDivElement,
 		record: FileRecord,
 		rootPath: string,
+		displayStatus: FileDisplayStatus,
 	): void {
 		const absolutePath = getAbsoluteFilePath(
 			rootPath,
@@ -273,12 +293,14 @@ export class FilePilotView extends ItemView {
 		});
 
 		const statusText =
-			record.status === 'available'
-				? t('fileStatusAvailable')
-				: t('fileStatusMissing');
+			displayStatus === 'ignored'
+				? t('fileStatusIgnored')
+				: displayStatus === 'available'
+					? t('fileStatusAvailable')
+					: t('fileStatusMissing');
 
 		metaEl.createDiv({
-			cls: `file-pilot-file-status file-pilot-status-${record.status}`,
+			cls: `file-pilot-file-status file-pilot-status-${displayStatus}`,
 			text: statusText,
 		});
 	}

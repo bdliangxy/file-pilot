@@ -5,6 +5,9 @@ export type IgnoreRuleCategory =
 	| 'filenames'
 	| 'extensions';
 
+import type { Ignore } from 'ignore';
+import type { FileRecord } from '../core/file-interface';
+
 export const MAX_EXTENSION_LENGTH = 64;
 
 export function inputIsValidExtension(extension: string): boolean {
@@ -85,3 +88,14 @@ export function createSelectedIgnorePattern(
 	return `${prefix}${escapedPath}${suffix}`;
 }
 
+export type FileDisplayStatus =
+	FileRecord['status'] | 'ignored';
+
+export function getDisplayStatus(
+	record: Pick<FileRecord, 'path' | 'status'>,
+	matcher: Ignore,
+): FileDisplayStatus {
+	return matcher.ignores(record.path)
+		? 'ignored'
+		: record.status;
+}
