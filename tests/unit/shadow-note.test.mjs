@@ -5,7 +5,7 @@ import { createFakeVault } from '../fakes/index.mjs';
 import { createTestJiti } from '../helpers/test-jiti.mjs';
 
 const jiti = createTestJiti(import.meta.url);
-const { ShadowNoteService } = await jiti.import('../../src/core/shadow-note.ts');
+const { ShadowNoteService } = await jiti.import('../../src/core/shadow-note-service.ts');
 
 function setup(existingPaths = []) {
 	const fake = createFakeVault(existingPaths);

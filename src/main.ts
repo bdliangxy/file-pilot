@@ -38,6 +38,7 @@ export default class FilePilotPlugin extends Plugin {
 		// Initialize the Shadow Note watcher.
 		this.shadowNoteWatcher = new ShadowNoteWatcher(
 			this.app.vault,
+			this.app.metadataCache,
 			this.stateService,
 			() => this.refreshViewFileList(),
 		);

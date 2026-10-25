@@ -3,7 +3,6 @@ import {
 	Notice,
 	Setting,
 	WorkspaceLeaf,
-	type EventRef,
 } from 'obsidian';
 
 import type FilePilotPlugin from '../main';
@@ -40,8 +39,8 @@ export class FilePilotView extends ItemView {
 	// Maps Shadow Note paths to their corresponding File Item UI elements.
 	private readonly mapNotePathItemState =
 		new Map<string, FileItemState>();
-	// Holds the MetadataCache event reference for automatic summary updates.
-	private summaryChangeRef: EventRef | null = null;
+	// Unsubscribes from Shadow Note content change notifications.
+	private unsubscribeNoteChanged: (() => void) | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -140,18 +139,21 @@ export class FilePilotView extends ItemView {
 			cls: 'file-pilot-files-section',
 		});
 
-		// Listen for updates to indexed Shadow Notes.
-		if (!this.summaryChangeRef) {
-			this.summaryChangeRef =
-				this.app.metadataCache.on('changed', (file) => {
-					const item = this.mapNotePathItemState.get(file.path);
+		// Subscribe to Shadow Note content changes.
+		if (!this.unsubscribeNoteChanged) {
+			this.unsubscribeNoteChanged =
+				this.filePilot.shadowNoteWatcher.onNoteChanged(
+					(notePath) => {
+						const item =
+							this.mapNotePathItemState.get(notePath);
 
-					if (!item) {
-						return;
-					}
+						if (!item) {
+							return;
+						}
 
-					void this.updateFileSummary(item);
-				});
+						void this.updateFileSummary(item);
+					},
+				);
 		}
 
 		// Render the initial file list.
@@ -159,12 +161,8 @@ export class FilePilotView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
-		if (this.summaryChangeRef) {
-			this.app.metadataCache.offref(
-				this.summaryChangeRef,
-			);
-			this.summaryChangeRef = null;
-		}
+		this.unsubscribeNoteChanged?.();
+		this.unsubscribeNoteChanged = null;
 
 		this.mapNotePathItemState.clear();
 		this.rootSetting = null;

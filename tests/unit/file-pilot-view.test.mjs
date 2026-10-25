@@ -23,25 +23,23 @@ function setup(summaryReader = async () => null) {
         shadowNotePath: 'ShadowNotes/report.md',
     });
     let ignorePatterns = [];
-    const callbacks = new Map();
+    const listeners = new Set();
     let subscribed = 0;
     let unsubscribed = 0;
     let reads = 0;
-    const app = {
-        metadataCache: {
-            on(name, callback) {
-                assert.equal(name, 'changed');
+    const app = {};
+    const plugin = {
+        shadowNoteWatcher: {
+            onNoteChanged(callback) {
                 subscribed++;
-                callbacks.set(name, callback);
-                return { name };
-            },
-            offref(ref) {
-                callbacks.delete(ref.name);
-                unsubscribed++;
+                listeners.add(callback);
+                return () => {
+                    if (listeners.delete(callback)) {
+                        unsubscribed++;
+                    }
+                };
             },
         },
-    };
-    const plugin = {
         stateService: {
             getRootPath: () => 'C:/files',
             getFileRecords: () => [record],
@@ -72,11 +70,16 @@ function setup(summaryReader = async () => null) {
     };
     return {
         view, record, find,
-        emit: (path) => callbacks.get('changed')?.({ path }),
+        emit: (path) => {
+            for (const callback of listeners) {
+                callback(path);
+            }
+        },
         setIgnorePatterns: (patterns) => { ignorePatterns = [...patterns]; },
         get reads() { return reads; },
         get subscribed() { return subscribed; },
         get unsubscribed() { return unsubscribed; },
+        get activeSubscriptions() { return listeners.size; },
     };
 }
 
@@ -133,20 +136,24 @@ test('outdated summary reads cannot overwrite a newer result', async () => {
     await ui.view.onClose();
 });
 
-test('closes and reopens without accumulating metadata listeners', async () => {
+test('closes and reopens without accumulating watcher subscriptions', async () => {
     const ui = setup();
     await ui.view.onOpen();
     assert.equal(ui.subscribed, 1);
+    assert.equal(ui.activeSubscriptions, 1);
     await ui.view.onClose();
     assert.equal(ui.unsubscribed, 1);
+    assert.equal(ui.activeSubscriptions, 0);
     const before = ui.reads;
     ui.emit(ui.record.shadowNotePath);
     await flush();
     assert.equal(ui.reads, before);
     await ui.view.onOpen();
     assert.equal(ui.subscribed, 2);
+    assert.equal(ui.activeSubscriptions, 1);
     await ui.view.onClose();
     assert.equal(ui.unsubscribed, 2);
+    assert.equal(ui.activeSubscriptions, 0);
 });
 
 
