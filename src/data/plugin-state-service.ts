@@ -99,6 +99,22 @@ export class PluginStateService {
 
 		await this.save(nextData);
 	}
+	async removeFileRecord(id: string): Promise<void> {
+		const nextData = structuredClone(this.getData());
+		const records = nextData.pluginData.fileRecords;
+
+		const index = records.findIndex(
+			record => record.id === id
+		);
+
+		if (index === -1) {
+			return;
+		}
+
+		records.splice(index, 1);
+
+		await this.save(nextData);
+	}
 
 	private async validateRootPath(
 		rootPath: string,

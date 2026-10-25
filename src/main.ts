@@ -4,10 +4,11 @@ import { logger } from './utils/logger';
 import { FilePilotSettingTab } from './ui/file-pilot-setting-tab';
 import { t } from './i18n/index';
 import { FileScanner } from './core/file-scanner';
-import { ShadowNoteService } from './core/shadow-note';
+import { ShadowNoteService } from './core/shadow-note-service';
 import { FilePilotView, VIEW_TYPE } from './ui/file-pilot-view';
 import { FileSyncService } from './core/file-sync';
 import type { SyncResult } from './core/file-sync';
+import { ShadowNoteWatcher } from './core/shadow-note-watcher';
 
 export default class FilePilotPlugin extends Plugin {
 	//he state service owns and persists all plugin data.
@@ -17,6 +18,7 @@ export default class FilePilotPlugin extends Plugin {
 	});
 	private fileSyncService!: FileSyncService;
 	public shadowNoteService!: ShadowNoteService;
+	public shadowNoteWatcher!: ShadowNoteWatcher;
 
 
 	async onload(): Promise<void> {
@@ -32,6 +34,15 @@ export default class FilePilotPlugin extends Plugin {
 			(records) => this.stateService.addFileRecords(records),
 			() => this.stateService.getFileRecords(),
 		);
+
+		// Initialize the Shadow Note watcher.
+		this.shadowNoteWatcher = new ShadowNoteWatcher(
+			this.app.vault,
+			this.stateService,
+			() => this.refreshViewFileList(),
+		);
+
+		this.addChild(this.shadowNoteWatcher);
 
 		// Register settings.
 		this.addSettingTab(

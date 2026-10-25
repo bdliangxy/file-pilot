@@ -1,5 +1,5 @@
 import type { FileScanner } from './file-scanner';
-import type { ShadowNoteService } from './shadow-note';
+import type { ShadowNoteService } from './shadow-note-service';
 import { importScannedFiles } from './file-import';
 
 import type { FileScope, FileRecord } from './file-interface';
