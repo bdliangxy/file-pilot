@@ -72,4 +72,7 @@ export const en = {
 	fileStatusMissing: 'Missing',
 	fileStatusIgnored: 'Ignored',
 
+	hideShadowNotesName: 'Hide Shadow Notes',
+	hideShadowNotesDesc:
+		'Hide the ShadowNotes folder in the native file explorer without affecting the notes themselves.',
 } as const;

@@ -2,6 +2,7 @@ export function makePluginData({
     rootPath = '',
     ignorePatterns = [],
     watchEnabled = true,
+    hideShadowNotesInExplorer = true,
     fileRecords = [],
     version = 2,
 } = {}) {
@@ -12,6 +13,7 @@ export function makePluginData({
                 ignorePatterns: [...ignorePatterns],
                 watchEnabled,
             },
+            hideShadowNotesInExplorer,
         },
         pluginData: {
             version,

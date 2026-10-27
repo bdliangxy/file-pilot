@@ -9,6 +9,7 @@ import { FilePilotView, VIEW_TYPE } from './ui/file-pilot-view';
 import { FileSyncService } from './core/file-sync';
 import type { SyncResult } from './core/file-sync';
 import { ShadowNoteWatcher } from './core/shadow-note-watcher';
+import { setShadowNotesHidden } from './ui/obsidian-ui';
 
 export default class FilePilotPlugin extends Plugin {
 	//he state service owns and persists all plugin data.
@@ -25,7 +26,8 @@ export default class FilePilotPlugin extends Plugin {
 
 		// Load persisted plugin data.
 		await this.stateService.load();
-
+		// Apply ShadowNotes visibility settings.
+		this.applyShadowNotesVisibility();
 		this.shadowNoteService = new ShadowNoteService(this.app);
 		// Initialize file synchronization.
 		this.fileSyncService = new FileSyncService(
@@ -71,6 +73,7 @@ export default class FilePilotPlugin extends Plugin {
 	}
 
 	onunload(): void {
+		setShadowNotesHidden(false);
 		logger.debug('Plugin unloaded');
 	}
 	private async activateFilePilotView(): Promise<void> {
@@ -117,6 +120,12 @@ export default class FilePilotPlugin extends Plugin {
 				leaf.view.refreshFileList();
 			}
 		}
+	}
+
+	applyShadowNotesVisibility(): void {
+		setShadowNotesHidden(
+			this.stateService.getHideShadowNotesInExplorer()
+		);
 	}
 
 }

@@ -32,10 +32,12 @@ async function setup(data = makePluginData()) {
 
     let refreshes = 0;
     let listRefreshes = 0;
+    let visibilityRefreshes = 0;
     const plugin = {
         stateService: service,
         refreshViewRootPath() { refreshes++; },
         refreshViewFileList() { listRefreshes++; },
+        applyShadowNotesVisibility() { visibilityRefreshes++; },
     };
     const tab = new FilePilotSettingTab({}, plugin);
     const definitions = tab.getSettingDefinitions();
@@ -52,10 +54,12 @@ async function setup(data = makePluginData()) {
         settings,
         rootInput: settings[0].texts[0],
         ignoreInput: settings[1].textAreas[0],
+        hideToggle: settings[2].toggles[0],
         browse: findButton(settings[0], 'Browse'),
-        save: findButton(settings[2], 'Save settings'),
+        save: findButton(settings[3], 'Save settings'),
         get refreshes() { return refreshes; },
         get listRefreshes() { return listRefreshes; },
+        get visibilityRefreshes() { return visibilityRefreshes; },
     };
 }
 
@@ -178,7 +182,7 @@ test('Save settings commits the Ignore draft but restores a locked root', async 
     assert.equal(ui.rootInput.getValue(), initial);
     assert.equal(ui.service.getRootPath(), initial);
     assert.deepEqual(ui.service.getIgnorePatterns(), ['*.pdf', '*.log']);
-    assert.deepEqual(ui.tab.getSettingDefinitions().length, 3);
+    assert.deepEqual(ui.tab.getSettingDefinitions().length, 4);
     assert.equal(ui.ignoreInput.getValue(), '*.pdf\n*.log');
     assert.equal(ui.savedData.length, 1);
     assert.equal(ui.refreshes, 0);
@@ -231,6 +235,7 @@ test('an in-flight save does not replace edits typed after submission', async ()
     const stateService = {
         getRootPath() { return 'saved'; },
         getIgnorePatterns() { return []; },
+        getHideShadowNotesInExplorer() { return true; },
         updateSettings() {
             return new Promise((resolve) => {
                 finishSave = () => resolve({ updated: [], errors: {} });
@@ -281,3 +286,66 @@ test('invalid root with unchanged ignore rules does not refresh either view fiel
     assert.equal(ui.listRefreshes, 0);
     assert.equal(ui.savedData.length, 0);
 });
+
+test('ShadowNotes toggle edits a draft and only saves when Save settings is clicked', async () => {
+    const ui = await setup();
+    assert.equal(ui.hideToggle.getValue(), true);
+
+    ui.hideToggle.change(false);
+    assert.equal(ui.hideToggle.getValue(), false);
+    assert.equal(ui.service.getHideShadowNotesInExplorer(), true);
+    assert.equal(ui.savedData.length, 0);
+    assert.equal(ui.visibilityRefreshes, 0);
+
+    await ui.save.click();
+    assert.equal(ui.service.getHideShadowNotesInExplorer(), false);
+    assert.equal(ui.savedData.length, 1);
+    assert.equal(ui.savedData[0].settingData.hideShadowNotesInExplorer, false);
+    assert.equal(ui.visibilityRefreshes, 1);
+    assert.equal(ui.refreshes, 0);
+    assert.equal(ui.listRefreshes, 0);
+
+    await ui.save.click();
+    assert.equal(ui.savedData.length, 1);
+    assert.equal(ui.visibilityRefreshes, 1);
+
+    ui.hideToggle.change(true);
+    assert.equal(ui.service.getHideShadowNotesInExplorer(), false);
+    assert.equal(ui.visibilityRefreshes, 1);
+    await ui.save.click();
+    assert.equal(ui.service.getHideShadowNotesInExplorer(), true);
+    assert.equal(ui.visibilityRefreshes, 2);
+    assert.equal(ui.savedData.length, 2);
+});
+
+test('ShadowNotes draft is not persisted or applied when saving fails', async () => {
+    const service = new PluginStateService({
+        loadData: async () => makePluginData(),
+        saveData: async () => { throw new Error('Disk failure'); },
+    });
+    await service.load();
+    let visibilityRefreshes = 0;
+    const tab = new FilePilotSettingTab({}, {
+        stateService: service,
+        applyShadowNotesVisibility() { visibilityRefreshes++; },
+    });
+    const definitions = tab.getSettingDefinitions();
+    const toggleSetting = new Setting();
+    definitions[2].render(toggleSetting);
+    const toggle = toggleSetting.toggles[0];
+    const saveSetting = new Setting();
+    definitions[3].render(saveSetting);
+    const save = findButton(saveSetting, 'Save settings');
+    const previousLog = console.error;
+    console.error = () => {};
+    try {
+        toggle.change(false);
+        assert.equal(service.getHideShadowNotesInExplorer(), true);
+        await save.click();
+        assert.equal(service.getHideShadowNotesInExplorer(), true);
+        assert.equal(visibilityRefreshes, 0);
+    } finally {
+        console.error = previousLog;
+    }
+});
+

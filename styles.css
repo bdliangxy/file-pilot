@@ -344,3 +344,8 @@
 	overflow-y: auto;
 	overflow-x: hidden;
 }
+
+/* Hide ShadowNotes from Obsidian's native file explorer. */
+body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explorer"] .nav-folder:has(> .nav-folder-title[data-path="ShadowNotes"]) {
+	display: none !important;
+}

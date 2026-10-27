@@ -99,6 +99,22 @@ export class ButtonComponent {
     click() { return this.handler?.(); }
 }
 
+export class ToggleComponent {
+    constructor(parent) {
+        this.toggleEl = parent.createEl('input');
+        this.value = false;
+        parent.components.push(this);
+    }
+
+    setValue(value) { this.value = value; return this; }
+    getValue() { return this.value; }
+    onChange(handler) { this.handler = handler; return this; }
+    change(value) {
+        this.value = value;
+        return this.handler?.(value);
+    }
+}
+
 export class DropdownComponent {
     constructor(parent) {
         this.selectEl = parent.createEl('select');
@@ -149,6 +165,7 @@ export class Setting {
         this.controlEl = this.settingEl.createDiv();
         this.texts = [];
         this.textAreas = [];
+        this.toggles = [];
     }
 
     setName(value) { this.name = value; return this; }
@@ -163,6 +180,13 @@ export class Setting {
         const text = new TextComponent(this.controlEl);
         this.texts.push(text);
         callback(text);
+        return this;
+    }
+
+    addToggle(callback) {
+        const toggle = new ToggleComponent(this.controlEl);
+        this.toggles.push(toggle);
+        callback(toggle);
         return this;
     }
 

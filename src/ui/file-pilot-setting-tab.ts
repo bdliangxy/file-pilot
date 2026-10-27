@@ -30,12 +30,15 @@ type SettingsSaveFeedback =
 export class FilePilotSettingTab extends PluginSettingTab {
 	private rootPathInput?: TextComponent;
 	private readonly ignoreRulesSection: IgnoreRulesSettingSection;
+	private hideShadowNotesDraft: boolean;
 	constructor(
 		app: App,
 		private readonly filePilot: FilePilotPlugin,
 	) {
 		super(app, filePilot);
 		this.ignoreRulesSection = new IgnoreRulesSettingSection(this.filePilot.stateService);
+		this.hideShadowNotesDraft =
+			this.filePilot.stateService.getHideShadowNotesInExplorer();
 	}
 
 	getSettingDefinitions() {
@@ -109,7 +112,19 @@ export class FilePilotSettingTab extends PluginSettingTab {
 				},
 			},
 
-
+			{
+				name: t('hideShadowNotesName'),
+				desc: t('hideShadowNotesDesc'),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) => {
+						toggle
+							.setValue(this.hideShadowNotesDraft)
+							.onChange((hidden) => {
+								this.hideShadowNotesDraft = hidden;
+							});
+					});
+				},
+			},
 			{
 				name: '',
 				render: (setting: Setting) => {
@@ -121,6 +136,7 @@ export class FilePilotSettingTab extends PluginSettingTab {
 								const result = await this.saveSettings({
 									rootPath: this.rootPathInput?.getValue(),
 									ignorePatterns: this.ignoreRulesSection.getDraft(),
+									hideShadowNotesInExplorer: this.hideShadowNotesDraft,
 								});
 
 								if (result && !result.errors.ignorePatterns) {
@@ -145,6 +161,9 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			}
 			if (result.updated.includes('ignorePatterns')) {
 				this.filePilot.refreshViewFileList();
+			}
+			if (result.updated.includes('hideShadowNotesInExplorer')) {
+				this.filePilot.applyShadowNotesVisibility();
 			}
 			this.showSettingsFeedback({
 				type: 'result',

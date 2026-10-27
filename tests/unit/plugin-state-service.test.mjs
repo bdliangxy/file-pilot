@@ -410,3 +410,18 @@ test('omitted settings are not modified or persisted', async () => {
 	assert.deepEqual(result, { updated: [], errors: {} });
 	assert.equal(savedData.length, 0);
 });
+
+test('failed visibility setting persistence preserves the previous value', async () => {
+    const service = new PluginStateService({
+        loadData: async () => makePluginData(),
+        saveData: async () => { throw new Error('Disk failure'); },
+    });
+    await service.load();
+
+    await assert.rejects(
+        service.updateSettings({ hideShadowNotesInExplorer: false }),
+        /Disk failure/,
+    );
+    assert.equal(service.getHideShadowNotesInExplorer(), true);
+});
+
