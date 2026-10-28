@@ -235,7 +235,7 @@ test('an in-flight save does not replace edits typed after submission', async ()
     const stateService = {
         getRootPath() { return 'saved'; },
         getIgnorePatterns() { return []; },
-        getHideShadowNotesInExplorer() { return true; },
+        getHideShadowNotesFlag() { return true; },
         updateSettings() {
             return new Promise((resolve) => {
                 finishSave = () => resolve({ updated: [], errors: {} });
@@ -293,14 +293,14 @@ test('ShadowNotes toggle edits a draft and only saves when Save settings is clic
 
     ui.hideToggle.change(false);
     assert.equal(ui.hideToggle.getValue(), false);
-    assert.equal(ui.service.getHideShadowNotesInExplorer(), true);
+    assert.equal(ui.service.getHideShadowNotesFlag(), true);
     assert.equal(ui.savedData.length, 0);
     assert.equal(ui.visibilityRefreshes, 0);
 
     await ui.save.click();
-    assert.equal(ui.service.getHideShadowNotesInExplorer(), false);
+    assert.equal(ui.service.getHideShadowNotesFlag(), false);
     assert.equal(ui.savedData.length, 1);
-    assert.equal(ui.savedData[0].settingData.hideShadowNotesInExplorer, false);
+    assert.equal(ui.savedData[0].settingData.hideShadowNotesFlag, false);
     assert.equal(ui.visibilityRefreshes, 1);
     assert.equal(ui.refreshes, 0);
     assert.equal(ui.listRefreshes, 0);
@@ -310,10 +310,10 @@ test('ShadowNotes toggle edits a draft and only saves when Save settings is clic
     assert.equal(ui.visibilityRefreshes, 1);
 
     ui.hideToggle.change(true);
-    assert.equal(ui.service.getHideShadowNotesInExplorer(), false);
+    assert.equal(ui.service.getHideShadowNotesFlag(), false);
     assert.equal(ui.visibilityRefreshes, 1);
     await ui.save.click();
-    assert.equal(ui.service.getHideShadowNotesInExplorer(), true);
+    assert.equal(ui.service.getHideShadowNotesFlag(), true);
     assert.equal(ui.visibilityRefreshes, 2);
     assert.equal(ui.savedData.length, 2);
 });
@@ -340,9 +340,9 @@ test('ShadowNotes draft is not persisted or applied when saving fails', async ()
     console.error = () => {};
     try {
         toggle.change(false);
-        assert.equal(service.getHideShadowNotesInExplorer(), true);
+        assert.equal(service.getHideShadowNotesFlag(), true);
         await save.click();
-        assert.equal(service.getHideShadowNotesInExplorer(), true);
+        assert.equal(service.getHideShadowNotesFlag(), true);
         assert.equal(visibilityRefreshes, 0);
     } finally {
         console.error = previousLog;

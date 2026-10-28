@@ -1,23 +1,23 @@
 export function makePluginData({
-    rootPath = '',
-    ignorePatterns = [],
-    watchEnabled = true,
-    hideShadowNotesInExplorer = true,
-    fileRecords = [],
-    version = 2,
+	rootPath = '',
+	ignorePatterns = [],
+	watchEnabled = true,
+	hideShadowNotesFlag = true,
+	fileRecords = [],
+	version = 2,
 } = {}) {
-    return {
-        settingData: {
-            fileScope: {
-                rootPath,
-                ignorePatterns: [...ignorePatterns],
-                watchEnabled,
-            },
-            hideShadowNotesInExplorer,
-        },
-        pluginData: {
-            version,
-            fileRecords: structuredClone(fileRecords),
-        },
-    };
+	return {
+		settingData: {
+			fileScope: {
+				rootPath,
+				ignorePatterns: [...ignorePatterns],
+				watchEnabled,
+			},
+			hideShadowNotesFlag,
+		},
+		pluginData: {
+			version,
+			fileRecords: structuredClone(fileRecords),
+		},
+	};
 }

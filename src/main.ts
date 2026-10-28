@@ -124,7 +124,7 @@ export default class FilePilotPlugin extends Plugin {
 
 	applyShadowNotesVisibility(): void {
 		setShadowNotesHidden(
-			this.stateService.getHideShadowNotesInExplorer()
+			this.stateService.getHideShadowNotesFlag()
 		);
 	}
 

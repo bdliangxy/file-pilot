@@ -419,9 +419,9 @@ test('failed visibility setting persistence preserves the previous value', async
     await service.load();
 
     await assert.rejects(
-        service.updateSettings({ hideShadowNotesInExplorer: false }),
+        service.updateSettings({ hideShadowNotesFlag: false }),
         /Disk failure/,
     );
-    assert.equal(service.getHideShadowNotesInExplorer(), true);
+    assert.equal(service.getHideShadowNotesFlag(), true);
 });
 

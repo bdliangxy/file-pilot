@@ -2,7 +2,7 @@ import type { FileScope } from "../core/file-interface";
 
 export interface SettingData {
 	fileScope: FileScope;
-	hideShadowNotesInExplorer: boolean;
+	hideShadowNotesFlag: boolean;
 }
 
 export const DEFAULT_IGNORE_PATTERNS = [
@@ -22,5 +22,5 @@ export const DEFAULT_SETTINGS: SettingData = {
 		ignorePatterns: [...DEFAULT_IGNORE_PATTERNS],
 		watchEnabled: true,
 	},
-	hideShadowNotesInExplorer: true,
+	hideShadowNotesFlag: true,
 };

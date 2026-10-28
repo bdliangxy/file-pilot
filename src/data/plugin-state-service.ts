@@ -24,7 +24,7 @@ export interface DataAdapter {
 export interface SettingsChanges {
 	rootPath?: string;
 	ignorePatterns?: string[];
-	hideShadowNotesInExplorer?: boolean;
+	hideShadowNotesFlag?: boolean;
 }
 
 export interface SettingsUpdateResult {
@@ -58,8 +58,8 @@ export class PluginStateService {
 	getRootPath(): string {
 		return this.getData().settingData.fileScope.rootPath;
 	}
-	getHideShadowNotesInExplorer(): boolean {
-		return this.getData().settingData.hideShadowNotesInExplorer;
+	getHideShadowNotesFlag(): boolean {
+		return this.getData().settingData.hideShadowNotesFlag;
 	}
 
 	getIgnorePatterns(): string[] {
@@ -230,15 +230,15 @@ export class PluginStateService {
 		}
 
 		// 3. Update ShadowNotes visibility preference.
-		if (changes.hideShadowNotesInExplorer !== undefined) {
-			const hidden = changes.hideShadowNotesInExplorer;
+		if (changes.hideShadowNotesFlag !== undefined) {
+			const hidden = changes.hideShadowNotesFlag;
 
 			if (
 				hidden !==
-				currentData.settingData.hideShadowNotesInExplorer
+				currentData.settingData.hideShadowNotesFlag
 			) {
-				nextData.settingData.hideShadowNotesInExplorer = hidden;
-				result.updated.push('hideShadowNotesInExplorer');
+				nextData.settingData.hideShadowNotesFlag = hidden;
+				result.updated.push('hideShadowNotesFlag');
 			}
 		}
 
