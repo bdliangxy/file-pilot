@@ -97,4 +97,8 @@ export class ShadowNoteWatcher extends Component {
 			}
 		}
 	}
+
+	async waitForPendingDeletions(): Promise<void> {
+		await this.deletionQueue;
+	}
 }

@@ -105,4 +105,23 @@ export class ShadowNoteService {
 			'File Summary',
 		);
 	}
+
+	async deleteAllShadowNotes(): Promise<void> {
+		const folder = this.app.vault.getFolderByPath('ShadowNotes');
+
+		if (!folder) {
+			return;
+		}
+
+		const notes = this.app.vault.getMarkdownFiles()
+			.filter(file => file.path.startsWith('ShadowNotes/'));
+
+		for (const note of notes) {
+			await this.app.fileManager.trashFile(note);
+		}
+
+		if (folder.children.length === 0) {
+			await this.app.fileManager.trashFile(folder);
+		}
+	}
 }

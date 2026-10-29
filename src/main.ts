@@ -10,6 +10,7 @@ import { FileSyncService } from './core/file-sync';
 import type { SyncResult } from './core/file-sync';
 import { ShadowNoteWatcher } from './core/shadow-note-watcher';
 import { setShadowNotesHidden } from './ui/obsidian-ui';
+import { FilePilotError } from './error';
 
 export default class FilePilotPlugin extends Plugin {
 	//he state service owns and persists all plugin data.
@@ -20,7 +21,7 @@ export default class FilePilotPlugin extends Plugin {
 	private fileSyncService!: FileSyncService;
 	public shadowNoteService!: ShadowNoteService;
 	public shadowNoteWatcher!: ShadowNoteWatcher;
-
+	private clearInProgress = false;
 
 	async onload(): Promise<void> {
 
@@ -97,6 +98,12 @@ export default class FilePilotPlugin extends Plugin {
 	}
 
 	async syncFiles(): Promise<SyncResult> {
+		if (this.clearInProgress) {
+			throw new FilePilotError(
+				'CLEAR_IN_PROGRESS',
+				'Cannot scan while clearing data',
+			);
+		}
 		return this.fileSyncService.syncFiles(
 			this.stateService.getFileScope(),
 		);
@@ -126,6 +133,37 @@ export default class FilePilotPlugin extends Plugin {
 		setShadowNotesHidden(
 			this.stateService.getHideShadowNotesFlag()
 		);
+	}
+
+	async clearUserData(): Promise<void> {
+		if (this.clearInProgress) {
+			throw new FilePilotError(
+				'CLEAR_IN_PROGRESS',
+				'Data clearing already in progress',
+			);
+		}
+
+		if (this.fileSyncService.isSyncInProgress) {
+			throw new FilePilotError(
+				'SYNC_IN_PROGRESS',
+				'Cannot clear data while scanning',
+			);
+		}
+		this.clearInProgress = true;
+		try {
+			await this.shadowNoteService.deleteAllShadowNotes();
+
+			await this.shadowNoteWatcher.waitForPendingDeletions();
+
+			await this.stateService.resetAllData();
+
+			this.refreshViewRootPath();
+			this.refreshViewFileList();
+			this.applyShadowNotesVisibility();
+		} finally {
+			this.clearInProgress = false;
+		}
+
 	}
 
 }

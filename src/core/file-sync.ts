@@ -72,4 +72,8 @@ export class FileSyncService {
 			this.syncInProgress = false;
 		}
 	}
+
+	get isSyncInProgress(): boolean {
+		return this.syncInProgress;
+	}
 }

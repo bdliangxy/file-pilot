@@ -73,5 +73,8 @@ export const zh = {
 	hideShadowNotesName: '隐藏影子笔记文件夹',
 	hideShadowNotesDesc:
 		'在 Obsidian 原生文件浏览器中隐藏 ShadowNotes 文件夹，不影响笔记的读取和编辑。',
-
+	clearAllData: '清空数据',
+	clearAllDataSuccess: `成功清空数据`,
+	clearAllDataFailed: '清空数据失败',
+	clearInProgress: `正在清空数据`,
 } satisfies Record<keyof typeof en, string>;

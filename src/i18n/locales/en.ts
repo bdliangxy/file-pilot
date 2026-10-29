@@ -75,4 +75,8 @@ export const en = {
 	hideShadowNotesName: 'Hide Shadow Notes',
 	hideShadowNotesDesc:
 		'Hide the ShadowNotes folder in the native file explorer without affecting the notes themselves.',
+	clearAllData: 'Clear Data',
+	clearAllDataSuccess: `Data cleared successfully`,
+	clearAllDataFailed: 'Failed to clear data',
+	clearInProgress: `Data clearing in progress`,
 } as const;

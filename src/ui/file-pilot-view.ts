@@ -116,6 +116,10 @@ export class FilePilotView extends ItemView {
 									case 'SCAN_ROOT_NOT_CONFIGURED':
 										new Notice(t('scanRootNotConfigured'));
 										return;
+
+									case 'CLEAR_IN_PROGRESS':
+										new Notice(t('clearInProgress'));
+										return;
 								}
 							}
 							console.error('File Pilot scan failed:', error);

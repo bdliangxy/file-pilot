@@ -127,9 +127,43 @@ export class FilePilotSettingTab extends PluginSettingTab {
 					});
 				},
 			},
+
 			{
 				name: '',
 				render: (setting: Setting) => {
+					setting.settingEl.addClass('file-pilot-settings-actions');
+
+					setting.addButton((button) => {
+						button
+							.setButtonText(t('clearAllData'))
+							.setDestructive()
+							.onClick(async () => {
+								button.setDisabled(true);
+
+								try {
+									await this.filePilot.clearUserData();
+									this.update();
+									new Notice(t('clearAllDataSuccess'));
+								} catch (error) {
+									if (error instanceof FilePilotError) {
+										if (error.code === 'SYNC_IN_PROGRESS') {
+											new Notice(t('syncAlreadyInProgress'));
+											return;
+										}
+
+										if (error.code === 'CLEAR_IN_PROGRESS') {
+											new Notice(t('clearInProgress'));
+											return;
+										}
+									}
+									console.error('Failed to clear data:', error);
+									new Notice(t('clearAllDataFailed'));
+								} finally {
+									button.setDisabled(false);
+								}
+							});
+					});
+
 					setting.addButton((button) => {
 						button
 							.setButtonText(t('settingsSave'))

@@ -264,6 +264,11 @@ export class PluginStateService {
 
 		return this.data;
 	}
+
+	async resetAllData(): Promise<void> {
+		const defaultData = structuredClone(DEFAULT_DATA);
+		await this.save(defaultData);
+	}
 }
 
 function isData(value: unknown): value is Data {

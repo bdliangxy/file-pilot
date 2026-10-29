@@ -349,3 +349,13 @@
 body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explorer"] .nav-folder:has(> .nav-folder-title[data-path="ShadowNotes"]) {
 	display: none !important;
 }
+
+.file-pilot-settings-actions .setting-item-info {
+	display: none;
+}
+
+.file-pilot-settings-actions .setting-item-control {
+	display: flex;
+	flex: 1 1 auto;
+	justify-content: space-between;
+}
