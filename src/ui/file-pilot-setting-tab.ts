@@ -208,6 +208,13 @@ export class FilePilotSettingTab extends PluginSettingTab {
 
 			return result;
 		} catch (error) {
+			if (
+				error instanceof FilePilotError &&
+				error.code === 'CLEAR_IN_PROGRESS'
+			) {
+				new Notice(t('clearInProgress'));
+				return null;
+			}
 			this.showSettingsFeedback({
 				type: 'failure',
 				error,

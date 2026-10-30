@@ -21,7 +21,6 @@ export default class FilePilotPlugin extends Plugin {
 	private fileSyncService!: FileSyncService;
 	public shadowNoteService!: ShadowNoteService;
 	public shadowNoteWatcher!: ShadowNoteWatcher;
-	private clearInProgress = false;
 
 	async onload(): Promise<void> {
 
@@ -98,12 +97,13 @@ export default class FilePilotPlugin extends Plugin {
 	}
 
 	async syncFiles(): Promise<SyncResult> {
-		if (this.clearInProgress) {
+		if (this.stateService.isClearingData) {
 			throw new FilePilotError(
 				'CLEAR_IN_PROGRESS',
 				'Cannot scan while clearing data',
 			);
 		}
+
 		return this.fileSyncService.syncFiles(
 			this.stateService.getFileScope(),
 		);
@@ -136,34 +136,34 @@ export default class FilePilotPlugin extends Plugin {
 	}
 
 	async clearUserData(): Promise<void> {
-		if (this.clearInProgress) {
-			throw new FilePilotError(
-				'CLEAR_IN_PROGRESS',
-				'Data clearing already in progress',
-			);
-		}
-
 		if (this.fileSyncService.isSyncInProgress) {
 			throw new FilePilotError(
 				'SYNC_IN_PROGRESS',
 				'Cannot clear data while scanning',
 			);
 		}
-		this.clearInProgress = true;
+
+		this.stateService.beginClearing();
+
 		try {
+			// Finish all previously accepted data mutations.
+			await this.stateService.waitForPendingMutations();
+
+			// Delete the plugin-managed Shadow Notes.
 			await this.shadowNoteService.deleteAllShadowNotes();
 
+			// Finish previously queued note deletion handlers.
 			await this.shadowNoteWatcher.waitForPendingDeletions();
 
+			// Restore the default plugin data.
 			await this.stateService.resetAllData();
 
 			this.refreshViewRootPath();
 			this.refreshViewFileList();
 			this.applyShadowNotesVisibility();
 		} finally {
-			this.clearInProgress = false;
+			this.stateService.endClearing();
 		}
-
 	}
 
 }

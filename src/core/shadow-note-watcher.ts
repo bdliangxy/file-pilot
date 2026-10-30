@@ -41,7 +41,10 @@ export class ShadowNoteWatcher extends Component {
 				if (!(file instanceof TFile)) {
 					return;
 				}
-
+				// Data reset handles record removal in bulk.
+				if (this.stateService.isClearingData) {
+					return;
+				}
 				const notePath = file.path;
 
 				// Process deletions sequentially.
@@ -76,6 +79,10 @@ export class ShadowNoteWatcher extends Component {
 	}
 
 	private async handleDelete(notePath: string): Promise<void> {
+		if (this.stateService.isClearingData) {
+			return;
+		}
+
 		const records = this.stateService
 			.getFileRecords()
 			.filter(record => record.shadowNotePath === notePath);
@@ -88,6 +95,10 @@ export class ShadowNoteWatcher extends Component {
 
 		try {
 			for (const record of records) {
+				if (this.stateService.isClearingData) {
+					break;
+				}
+
 				await this.stateService.removeFileRecord(record.id);
 				removedCount++;
 			}

@@ -95,6 +95,8 @@ export class ButtonComponent {
     setIcon(icon) { this.icon = icon; return this; }
     setButtonText(label) { this.label = label; return this; }
     setCta() { return this; }
+    setDestructive() { this.destructive = true; return this; }
+    setDisabled(disabled) { this.disabled = disabled; return this; }
     onClick(handler) { this.handler = handler; return this; }
     click() { return this.handler?.(); }
 }

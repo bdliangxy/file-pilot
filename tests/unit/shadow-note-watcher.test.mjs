@@ -28,15 +28,18 @@ function makeEmitter() {
     };
 }
 
-function setup(records = []) {
+function setup(records = [], { beforeRemove = async () => {} } = {}) {
     const vault = makeEmitter();
     const metadataCache = makeEmitter();
     let stored = [...records];
+    let clearing = false;
     const removed = [];
     let refreshed = 0;
     const stateService = {
+        get isClearingData() { return clearing; },
         getFileRecords: () => [...stored],
         async removeFileRecord(id) {
+            await beforeRemove(id);
             removed.push(id);
             stored = stored.filter(record => record.id !== id);
         },
@@ -50,6 +53,7 @@ function setup(records = []) {
     watcher.onload();
     return {
         watcher, vault, metadataCache, removed,
+        setClearing(value) { clearing = value; },
         get records() { return stored; },
         get refreshed() { return refreshed; },
     };
@@ -146,4 +150,56 @@ test('sequential deletions preserve every unrelated record', async () => {
     assert.deepEqual(ctx.records, [{ id: 'three', shadowNotePath: 'ShadowNotes/c.md' }]);
     assert.equal(ctx.refreshed, 2);
     ctx.watcher.unload();
+});
+
+test('ignores delete events emitted while clearing', async () => {
+    const ctx = setup([{ id: 'one', shadowNotePath: 'ShadowNotes/a.md' }]);
+    ctx.setClearing(true);
+    ctx.vault.emit('delete', new TFile('ShadowNotes/a.md'));
+    await ctx.watcher.waitForPendingDeletions();
+    assert.deepEqual(ctx.removed, []);
+    assert.equal(ctx.refreshed, 0);
+    assert.equal(ctx.records.length, 1);
+    ctx.watcher.unload();
+});
+
+test('a queued deletion is skipped when clearing begins before execution', async () => {
+    const ctx = setup([{ id: 'one', shadowNotePath: 'ShadowNotes/a.md' }]);
+    ctx.vault.emit('delete', new TFile('ShadowNotes/a.md'));
+    ctx.setClearing(true);
+    await ctx.watcher.waitForPendingDeletions();
+    assert.deepEqual(ctx.removed, []);
+    assert.equal(ctx.records.length, 1);
+    ctx.watcher.unload();
+});
+
+test('deletion loop stops after an in-flight removal when clearing begins', async () => {
+    let releaseRemoval;
+    let signalStarted;
+    const started = new Promise(resolve => { signalStarted = resolve; });
+    const gate = new Promise(resolve => { releaseRemoval = resolve; });
+    const ctx = setup([
+        { id: 'one', shadowNotePath: 'ShadowNotes/a.md' },
+        { id: 'two', shadowNotePath: 'ShadowNotes/a.md' },
+    ], {
+        beforeRemove: async (id) => {
+            if (id === 'one') {
+                signalStarted();
+                await gate;
+            }
+        },
+    });
+    try {
+        ctx.vault.emit('delete', new TFile('ShadowNotes/a.md'));
+        await started;
+        ctx.setClearing(true);
+        releaseRemoval();
+        await ctx.watcher.waitForPendingDeletions();
+        assert.deepEqual(ctx.removed, ['one']);
+        assert.deepEqual(ctx.records.map(record => record.id), ['two']);
+        assert.equal(ctx.refreshed, 1);
+    } finally {
+        releaseRemoval();
+        ctx.watcher.unload();
+    }
 });

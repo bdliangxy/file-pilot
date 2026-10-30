@@ -34,7 +34,63 @@ export interface SettingsUpdateResult {
 
 export class PluginStateService {
 	private data: Data | null = null;
+	private clearInProgress = false;
+	private mutationQueue: Promise<void> = Promise.resolve();
 	constructor(private readonly dataAdapter: DataAdapter) { }
+	get isClearingData(): boolean {
+		return this.clearInProgress;
+	}
+	beginClearing(): void {
+		if (this.clearInProgress) {
+			throw new FilePilotError(
+				'CLEAR_IN_PROGRESS',
+				'Data clearing already in progress',
+			);
+		}
+
+		this.clearInProgress = true;
+	}
+	endClearing(): void {
+		this.clearInProgress = false;
+	}
+	// Responsible for serializing data modifications;
+	// new tasks are always queued after the previous task.
+	private enqueueMutation<T>(
+		operation: () => Promise<T>,
+	): Promise<T> {
+		const task = this.mutationQueue.then(operation);
+
+		this.mutationQueue = task.then(
+			() => undefined,
+			() => undefined,
+		);
+
+		return task;
+	}
+	// Responsible for admission control of regular modifications.
+	// As long as clearing is in progress, reject any new regular data modifications.
+	// This check is executed synchronously before the task enters the queue, so it does not need to wait for the previous task to finish.
+	private enqueueRegularMutation<T>(
+		operation: () => Promise<T>,
+	): Promise<T> {
+		if (this.clearInProgress) {
+			return Promise.reject(
+				new FilePilotError(
+					'CLEAR_IN_PROGRESS',
+					'Cannot modify data while clearing',
+				),
+			);
+		}
+
+		return this.enqueueMutation(operation);
+	}
+	// Once clearing starts, new tasks are first blocked from entering,
+	// and then it waits for all already-accepted tasks to finish.
+	// Therefore, there is no situation where notes are being deleted during clearing
+	// while earlier settings modifications are still being asynchronously written to `data.json`.
+	async waitForPendingMutations(): Promise<void> {
+		await this.mutationQueue;
+	}
 	// If the data meets the requirements after running load(),
 	// return the loaded data; otherwise, load the default value.
 	async load(): Promise<void> {
@@ -75,50 +131,55 @@ export class PluginStateService {
 			return;
 		}
 
-		// two cloned copies aims to keep the in-memory state unchanged if persistence fails.
-		const nextData = structuredClone(this.getData());
+		return this.enqueueRegularMutation(async () => {
+			const nextData = structuredClone(this.getData());
 
-		const fileRecords = nextData.pluginData.fileRecords;
-		// Build indexes from existing records.
-		const existingIds = new Set(
-			fileRecords.map(record => record.id)
-		);
-		const existingPaths = new Set(
-			fileRecords.map(record => record.path)
-		);
+			const fileRecords = nextData.pluginData.fileRecords;
 
-		for (const record of records) {
-			if (existingIds.has(record.id)) {
-				throw new Error("Duplicate FileRecord ID");
+			const existingIds = new Set(
+				fileRecords.map(record => record.id),
+			);
+
+			const existingPaths = new Set(
+				fileRecords.map(record => record.path),
+			);
+
+			for (const record of records) {
+				if (existingIds.has(record.id)) {
+					throw new Error('Duplicate FileRecord ID');
+				}
+
+				if (existingPaths.has(record.path)) {
+					throw new Error('Duplicate FileRecord path');
+				}
+
+				existingIds.add(record.id);
+				existingPaths.add(record.path);
 			}
 
-			if (existingPaths.has(record.path)) {
-				throw new Error("Duplicate FileRecord path");
-			}
+			fileRecords.push(...structuredClone(records));
 
-			existingIds.add(record.id);
-			existingPaths.add(record.path);
-		}
-
-		fileRecords.push(...structuredClone(records));
-
-		await this.save(nextData);
+			await this.save(nextData);
+		});
 	}
 	async removeFileRecord(id: string): Promise<void> {
-		const nextData = structuredClone(this.getData());
-		const records = nextData.pluginData.fileRecords;
+		return this.enqueueRegularMutation(async () => {
+			const nextData = structuredClone(this.getData());
 
-		const index = records.findIndex(
-			record => record.id === id
-		);
+			const records = nextData.pluginData.fileRecords;
 
-		if (index === -1) {
-			return;
-		}
+			const index = records.findIndex(
+				record => record.id === id,
+			);
 
-		records.splice(index, 1);
+			if (index === -1) {
+				return;
+			}
 
-		await this.save(nextData);
+			records.splice(index, 1);
+
+			await this.save(nextData);
+		});
 	}
 
 	private async validateRootPath(
@@ -165,90 +226,91 @@ export class PluginStateService {
 	async updateSettings(
 		changes: SettingsChanges,
 	): Promise<SettingsUpdateResult> {
-		const currentData = this.getData();
-		const nextData = structuredClone(currentData);
+		return this.enqueueRegularMutation(async () => {
+			const currentData = this.getData();
+			const nextData = structuredClone(currentData);
 
-		const result: SettingsUpdateResult = {
-			updated: [],
-			errors: {},
-		};
+			const result: SettingsUpdateResult = {
+				updated: [],
+				errors: {},
+			};
+			// 1. validate and handle rootpath scanning
+			if (changes.rootPath !== undefined) {
+				const newPath = changes.rootPath.trim();
 
-		// 1. validate and handle rootpath scanning
-		if (changes.rootPath !== undefined) {
-			const newPath = changes.rootPath.trim();
+				if (newPath !== currentData.settingData.fileScope.rootPath) {
+					try {
+						await this.validateRootPath(
+							newPath,
+							currentData,
+						);
 
-			if (newPath !== currentData.settingData.fileScope.rootPath) {
-				try {
-					await this.validateRootPath(
-						newPath,
-						currentData,
-					);
+						nextData.settingData.fileScope.rootPath = newPath;
+						result.updated.push('rootPath');
+					} catch (error) {
+						if (!(error instanceof FilePilotError)) {
+							throw error;
+						}
 
-					nextData.settingData.fileScope.rootPath = newPath;
-					result.updated.push('rootPath');
-				} catch (error) {
-					if (!(error instanceof FilePilotError)) {
-						throw error;
+						result.errors.rootPath = error;
 					}
-
-					result.errors.rootPath = error;
 				}
 			}
-		}
 
-		// 2. validate and handle Ignore rule
-		if (changes.ignorePatterns !== undefined) {
-			// Remove empty lines, but preserve other pattern characters.
-			const nextPatterns = changes.ignorePatterns.filter(
-				(pattern) => pattern.trim().length > 0,
-			);
+			// 2. validate and handle Ignore rule
+			if (changes.ignorePatterns !== undefined) {
+				// Remove empty lines, but preserve other pattern characters.
+				const nextPatterns = changes.ignorePatterns.filter(
+					(pattern) => pattern.trim().length > 0,
+				);
 
-			try {
-				// Validate with the same parser used by FileScanner.
-				ignore().add(nextPatterns);
+				try {
+					// Validate with the same parser used by FileScanner.
+					ignore().add(nextPatterns);
 
 
-				const previous =
-					currentData.settingData.fileScope.ignorePatterns;
+					const previous =
+						currentData.settingData.fileScope.ignorePatterns;
 
-				const unchanged =
-					previous.length === nextPatterns.length
-					&& previous.every(
-						(pattern, index) => pattern === nextPatterns[index],
-					);
+					const unchanged =
+						previous.length === nextPatterns.length
+						&& previous.every(
+							(pattern, index) => pattern === nextPatterns[index],
+						);
 
-				if (!unchanged) {
-					nextData.settingData.fileScope.ignorePatterns = nextPatterns;
-					result.updated.push('ignorePatterns');
+					if (!unchanged) {
+						nextData.settingData.fileScope.ignorePatterns = nextPatterns;
+						result.updated.push('ignorePatterns');
+					}
+				} catch (error) {
+					result.errors.ignorePatterns =
+						error instanceof Error
+							? error
+							: new Error(String(error));
 				}
-			} catch (error) {
-				result.errors.ignorePatterns =
-					error instanceof Error
-						? error
-						: new Error(String(error));
 			}
-		}
 
-		// 3. Update ShadowNotes visibility preference.
-		if (changes.hideShadowNotesFlag !== undefined) {
-			const hidden = changes.hideShadowNotesFlag;
+			// 3. Update ShadowNotes visibility preference.
+			if (changes.hideShadowNotesFlag !== undefined) {
+				const hidden = changes.hideShadowNotesFlag;
 
-			if (
-				hidden !==
-				currentData.settingData.hideShadowNotesFlag
-			) {
-				nextData.settingData.hideShadowNotesFlag = hidden;
-				result.updated.push('hideShadowNotesFlag');
+				if (
+					hidden !==
+					currentData.settingData.hideShadowNotesFlag
+				) {
+					nextData.settingData.hideShadowNotesFlag = hidden;
+					result.updated.push('hideShadowNotesFlag');
+				}
 			}
-		}
 
-		if (result.updated.length === 0) {
+			if (result.updated.length === 0) {
+				return result;
+			}
+
+			await this.save(nextData);
+
 			return result;
-		}
-
-		await this.save(nextData);
-
-		return result;
+		});
 	}
 
 
@@ -266,8 +328,17 @@ export class PluginStateService {
 	}
 
 	async resetAllData(): Promise<void> {
-		const defaultData = structuredClone(DEFAULT_DATA);
-		await this.save(defaultData);
+		if (!this.clearInProgress) {
+			throw new Error(
+				'Data reset requires an active clearing operation',
+			);
+		}
+
+		return this.enqueueMutation(async () => {
+			const defaultData = structuredClone(DEFAULT_DATA);
+
+			await this.save(defaultData);
+		});
 	}
 }
 
