@@ -2,9 +2,10 @@ import type { FileScope } from "../core/file-interface";
 
 export interface SettingData {
 	fileScope: FileScope;
+	projectName: string;
 	hideShadowNotesFlag: boolean;
 }
-
+export const MAX_PROJECT_NAME_LENGTH = 30;
 export const DEFAULT_IGNORE_PATTERNS = [
 	'# ===== System-generated cache and metadata =====',
 	'Thumbs.db',
@@ -22,5 +23,6 @@ export const DEFAULT_SETTINGS: SettingData = {
 		ignorePatterns: [...DEFAULT_IGNORE_PATTERNS],
 		watchEnabled: true,
 	},
+	projectName: '',
 	hideShadowNotesFlag: true,
 };

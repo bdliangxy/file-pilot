@@ -3,7 +3,8 @@ export function makePluginData({
 	ignorePatterns = [],
 	watchEnabled = true,
 	hideShadowNotesFlag = true,
-	fileRecords = [],
+	projectName = '',
+	fileRecords = [], 
 	version = 2,
 } = {}) {
 	return {
@@ -13,6 +14,7 @@ export function makePluginData({
 				ignorePatterns: [...ignorePatterns],
 				watchEnabled,
 			},
+			projectName,
 			hideShadowNotesFlag,
 		},
 		pluginData: {

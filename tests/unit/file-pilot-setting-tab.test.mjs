@@ -31,11 +31,13 @@ async function setup(data = makePluginData()) {
     await service.load();
 
     let refreshes = 0;
+    let projectNameRefreshes = 0;
     let listRefreshes = 0;
     let visibilityRefreshes = 0;
     const plugin = {
         stateService: service,
         refreshViewRootPath() { refreshes++; },
+        refreshViewProjectName() { projectNameRefreshes++; },
         refreshViewFileList() { listRefreshes++; },
         applyShadowNotesVisibility() { visibilityRefreshes++; },
     };
@@ -46,6 +48,11 @@ async function setup(data = makePluginData()) {
         definition.render(setting);
         return setting;
     });
+    tab.containerEl = {
+        querySelectorAll: () => settings
+            .filter(({ settingEl }) => settingEl.classes.has('file-pilot-requires-root'))
+            .map(({ settingEl }) => settingEl),
+    };
     Notice.messages.length = 0;
     return {
         service,
@@ -53,11 +60,13 @@ async function setup(data = makePluginData()) {
         tab,
         settings,
         rootInput: settings[0].texts[0],
-        ignoreInput: settings[1].textAreas[0],
-        hideToggle: settings[2].toggles[0],
+        projectNameInput: settings[1].texts[0],
+        ignoreInput: settings[2].textAreas[0],
+        hideToggle: settings[3].toggles[0],
         browse: findButton(settings[0], 'Browse'),
-        save: findButton(settings[3], 'Save settings'),
+        save: findButton(settings[4], 'Save settings'),
         get refreshes() { return refreshes; },
+        get projectNameRefreshes() { return projectNameRefreshes; },
         get listRefreshes() { return listRefreshes; },
         get visibilityRefreshes() { return visibilityRefreshes; },
     };
@@ -182,7 +191,7 @@ test('Save settings commits the Ignore draft but restores a locked root', async 
     assert.equal(ui.rootInput.getValue(), initial);
     assert.equal(ui.service.getRootPath(), initial);
     assert.deepEqual(ui.service.getIgnorePatterns(), ['*.pdf', '*.log']);
-    assert.deepEqual(ui.tab.getSettingDefinitions().length, 4);
+    assert.equal(ui.tab.getSettingDefinitions().length, 5);
     assert.equal(ui.ignoreInput.getValue(), '*.pdf\n*.log');
     assert.equal(ui.savedData.length, 1);
     assert.equal(ui.refreshes, 0);
@@ -234,6 +243,7 @@ test('an in-flight save does not replace edits typed after submission', async ()
     let finishSave;
     const stateService = {
         getRootPath() { return 'saved'; },
+        getProjectName() { return ''; },
         getIgnorePatterns() { return []; },
         getHideShadowNotesFlag() { return true; },
         updateSettings() {
@@ -331,10 +341,10 @@ test('ShadowNotes draft is not persisted or applied when saving fails', async ()
     });
     const definitions = tab.getSettingDefinitions();
     const toggleSetting = new Setting();
-    definitions[2].render(toggleSetting);
+    definitions[3].render(toggleSetting);
     const toggle = toggleSetting.toggles[0];
     const saveSetting = new Setting();
-    definitions[3].render(saveSetting);
+    definitions[4].render(saveSetting);
     const save = findButton(saveSetting, 'Save settings');
     const previousLog = console.error;
     console.error = () => {};
@@ -349,3 +359,37 @@ test('ShadowNotes draft is not persisted or applied when saving fails', async ()
     }
 });
 
+
+test('project-name draft is saved and only its overview title is refreshed', async () => {
+    const ui = await setup();
+    assert.equal(ui.projectNameInput.getValue(), '');
+    ui.projectNameInput.edit('  My Project  ');
+    assert.equal(ui.service.getProjectName(), '');
+    assert.equal(ui.savedData.length, 0);
+
+    await ui.save.click();
+    assert.equal(ui.service.getProjectName(), 'My Project');
+    assert.equal(ui.savedData.length, 1);
+    assert.equal(ui.projectNameRefreshes, 1);
+    assert.equal(ui.refreshes, 0);
+    assert.equal(ui.listRefreshes, 0);
+
+    await ui.save.click();
+    assert.equal(ui.savedData.length, 1);
+    assert.equal(ui.projectNameRefreshes, 1);
+
+    ui.projectNameInput.edit(' ');
+    await ui.save.click();
+    assert.equal(ui.service.getProjectName(), '');
+    assert.equal(ui.projectNameRefreshes, 2);
+});
+
+test('invalid project name shows localized validation feedback without refreshing the view', async () => {
+    const ui = await setup();
+    ui.projectNameInput.edit('x'.repeat(31));
+    await ui.save.click();
+    assert.equal(ui.service.getProjectName(), '');
+    assert.equal(ui.projectNameRefreshes, 0);
+    assert.equal(ui.savedData.length, 0);
+    assert.match(Notice.messages.at(-1), /at most 30 characters/);
+});

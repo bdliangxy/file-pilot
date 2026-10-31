@@ -202,6 +202,16 @@
 	background: transparent;
 }
 
+/* Overview title size can be customized without affecting the path or scan button. */
+.file-pilot-overview {
+	--file-pilot-overview-title-size: var(--font-ui-medium);
+}
+
+.file-pilot-overview .setting-item-name {
+	font-weight: 700;
+	font-size: var(--file-pilot-overview-title-size);
+}
+
 /* Keep long paths inside the information column. */
 .file-pilot-overview .setting-item-description {
 	overflow-wrap: anywhere;

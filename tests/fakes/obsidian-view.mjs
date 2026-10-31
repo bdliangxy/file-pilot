@@ -33,7 +33,7 @@ export class Setting {
     constructor(parent) {
         this.element = parent.createDiv();
     }
-    setName() { return this; }
+    setName(text) { this.name = text; return this; }
     setDesc(text) { this.description = text; return this; }
     addButton(callback) {
         callback({

@@ -56,6 +56,10 @@ export const zh = {
 	ignoreExtensionInvalid:
 		'扩展名只能包含英文字母、数字、下划线、连字符及中间的句点',
 	ignoreExtensionDuplicate: '该扩展名已存在于忽略规则中',
+	projectNameName: '项目名称',
+	projectNameDesc: '设置项目名称，留空使用默认名称',
+	projectNamePlaceholder: '输入项目名称（可选）',
+	projectNameInvalid: '项目名称不能超过 30 个字符或包含控制字符',
 
 	oneWayScan: `单向扫描`,
 	scanRootNotConfigured: `请先在插件设置页添加文件夹`,

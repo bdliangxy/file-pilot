@@ -36,6 +36,7 @@ interface FilePilotSettingDefinition {
 
 export class FilePilotSettingTab extends PluginSettingTab {
 	private rootPathInput?: TextComponent;
+	private projectNameInput?: TextComponent;
 	private readonly ignoreRulesSection: IgnoreRulesSettingSection;
 	private hideShadowNotesDraft!: boolean;
 	constructor(
@@ -109,6 +110,23 @@ export class FilePilotSettingTab extends PluginSettingTab {
 				},
 			},
 
+			{
+				name: t('projectNameName'),
+				desc: t('projectNameDesc'),
+
+				render: (setting: Setting) => {
+					setting.addText((text) => {
+						text.inputEl.addClass('file-pilot-path-input');
+						this.projectNameInput = text;
+
+						text
+							.setPlaceholder(t('projectNamePlaceholder'))
+							.setValue(
+								this.filePilot.stateService.getProjectName()
+							);
+					});
+				},
+			},
 
 			{
 				name: t('ignorePatternsName'),
@@ -180,6 +198,7 @@ export class FilePilotSettingTab extends PluginSettingTab {
 							.onClick(async () => {
 								const result = await this.saveSettings({
 									rootPath: this.rootPathInput?.getValue(),
+									projectName: this.projectNameInput?.getValue(),
 									ignorePatterns: this.ignoreRulesSection.getDraft(),
 									hideShadowNotesFlag: this.hideShadowNotesDraft,
 								});
@@ -217,6 +236,9 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			if (result.updated.includes('rootPath')) {
 				this.filePilot.refreshViewRootPath();
 				this.updateRootDependentVisibility();
+			}
+			if (result.updated.includes('projectName')) {
+				this.filePilot.refreshViewProjectName();
 			}
 			if (result.updated.includes('ignorePatterns')) {
 				this.filePilot.refreshViewFileList();
@@ -300,6 +322,10 @@ export class FilePilotSettingTab extends PluginSettingTab {
 					}
 					break;
 				}
+
+				case 'projectName':
+					errorMessages.push(t('projectNameInvalid'));
+					break;
 
 				case 'ignorePatterns':
 					errorMessages.push(t('ignorePatternsInvalid'));

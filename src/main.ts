@@ -119,6 +119,16 @@ export default class FilePilotPlugin extends Plugin {
 		}
 	}
 
+	refreshViewProjectName(): void {
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
+
+		for (const leaf of leaves) {
+			if (leaf.view instanceof FilePilotView) {
+				leaf.view.refreshProjectName();
+			}
+		}
+	}
+
 	refreshViewFileList(): void {
 		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
 

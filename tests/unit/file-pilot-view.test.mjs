@@ -23,6 +23,7 @@ function setup(summaryReader = async () => null) {
         shadowNotePath: 'ShadowNotes/report.md',
     });
     let ignorePatterns = [];
+    let projectName = '';
     const listeners = new Set();
     let subscribed = 0;
     let unsubscribed = 0;
@@ -42,6 +43,7 @@ function setup(summaryReader = async () => null) {
         },
         stateService: {
             getRootPath: () => 'C:/files',
+            getProjectName: () => projectName,
             getFileRecords: () => [record],
             getIgnorePatterns: () => [...ignorePatterns],
         },
@@ -76,6 +78,8 @@ function setup(summaryReader = async () => null) {
             }
         },
         setIgnorePatterns: (patterns) => { ignorePatterns = [...patterns]; },
+        setProjectName: (name) => { projectName = name; },
+        getOverviewTitle: () => view.rootSetting?.name,
         get reads() { return reads; },
         get subscribed() { return subscribed; },
         get unsubscribed() { return unsubscribed; },
@@ -202,5 +206,22 @@ test('refresh keeps missing status when a matching ignore rule is removed', asyn
     assert.equal(status.text, 'Missing');
     assert.ok(status.classes.has('file-pilot-status-missing'));
     assert.equal(ui.record.status, 'missing');
+    await ui.view.onClose();
+});
+
+test('overview uses the configured project name and refreshes without rebuilding the list', async () => {
+    const ui = setup();
+    ui.setProjectName('Client Documents');
+    await ui.view.onOpen();
+    assert.equal(ui.getOverviewTitle(), 'Client Documents');
+    const secondary = ui.find('file-pilot-file-secondary');
+    ui.setProjectName('Archive');
+    ui.view.refreshProjectName();
+    assert.equal(ui.getOverviewTitle(), 'Archive');
+    assert.equal(ui.find('file-pilot-file-secondary'), secondary);
+
+    ui.setProjectName('');
+    ui.view.refreshProjectName();
+    assert.equal(ui.getOverviewTitle(), 'project directory');
     await ui.view.onClose();
 });

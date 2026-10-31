@@ -425,3 +425,72 @@ test('failed visibility setting persistence preserves the previous value', async
     assert.equal(service.getHideShadowNotesFlag(), true);
 });
 
+
+test('project name is trimmed, persisted and survives reloading', async () => {
+    const adapter = createFakeDataAdapter(makePluginData());
+    const first = new PluginStateService(adapter);
+    await first.load();
+    assert.equal(first.getProjectName(), '');
+
+    assert.deepEqual(await first.updateSettings({ projectName: '  Work Files  ' }), {
+        updated: ['projectName'], errors: {},
+    });
+    assert.equal(first.getProjectName(), 'Work Files');
+    assert.equal(adapter.savedData.length, 1);
+
+    const next = new PluginStateService(adapter);
+    await next.load();
+    assert.equal(next.getProjectName(), 'Work Files');
+    assert.equal(adapter.savedData.length, 1);
+});
+
+test('project name accepts 30 Unicode characters but rejects longer or control-character names', async () => {
+    const { service, savedData } = createPluginStateServiceTestContext(PluginStateService);
+    await service.load();
+    const valid = '文'.repeat(30);
+    assert.deepEqual((await service.updateSettings({ projectName: valid })).updated, ['projectName']);
+    assert.equal(service.getProjectName(), valid);
+
+    for (const invalid of ['文'.repeat(31), 'bad\nname', 'bad\u007fname']) {
+        const result = await service.updateSettings({ projectName: invalid });
+        assert.deepEqual(result.updated, []);
+        assert.ok(result.errors.projectName instanceof Error);
+        assert.equal(service.getProjectName(), valid);
+    }
+    assert.equal(savedData.length, 1);
+});
+
+test('unchanged project name does not persist, and clearing it restores the default value', async () => {
+    const { service, savedData } = createPluginStateServiceTestContext(
+        PluginStateService, makePluginData({ projectName: 'Work' }),
+    );
+    await service.load();
+    assert.deepEqual((await service.updateSettings({ projectName: ' Work ' })).updated, []);
+    assert.equal(savedData.length, 0);
+    assert.deepEqual((await service.updateSettings({ projectName: '  ' })).updated, ['projectName']);
+    assert.equal(service.getProjectName(), '');
+    assert.equal(savedData.length, 1);
+});
+
+test('invalid project name does not block other valid settings', async () => {
+    const { service, savedData } = createPluginStateServiceTestContext(PluginStateService);
+    await service.load();
+    const result = await service.updateSettings({
+        projectName: 'x'.repeat(31), ignorePatterns: ['*.log'],
+    });
+    assert.deepEqual(result.updated, ['ignorePatterns']);
+    assert.ok(result.errors.projectName instanceof Error);
+    assert.equal(service.getProjectName(), '');
+    assert.deepEqual(service.getIgnorePatterns(), ['*.log']);
+    assert.equal(savedData.length, 1);
+});
+
+test('failed project-name persistence preserves the previous value', async () => {
+    const service = new PluginStateService({
+        loadData: async () => makePluginData({ projectName: 'Old' }),
+        saveData: async () => { throw new Error('Disk failure'); },
+    });
+    await service.load();
+    await assert.rejects(service.updateSettings({ projectName: 'New' }), /Disk failure/);
+    assert.equal(service.getProjectName(), 'Old');
+});

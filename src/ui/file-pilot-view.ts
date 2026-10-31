@@ -68,6 +68,13 @@ export class FilePilotView extends ItemView {
 		);
 	}
 
+	refreshProjectName(): void {
+		this.rootSetting?.setName(
+			this.filePilot.stateService.getProjectName()
+			|| t('scanRootName')
+		);
+	}
+
 	async onOpen(): Promise<void> {
 		const { contentEl } = this;
 		contentEl.empty();
@@ -81,7 +88,10 @@ export class FilePilotView extends ItemView {
 			this.filePilot.stateService.getRootPath();
 
 		this.rootSetting = new Setting(overviewSection)
-			.setName(t('scanRootName'))
+			.setName(
+				this.filePilot.stateService.getProjectName()
+				|| t('scanRootName')
+			)
 			.setDesc(rootPath || t('scanRootNotConfigured'))
 			.addButton((button) => {
 				button

@@ -50,6 +50,10 @@ export const en = {
 		'Extensions must contain only letters, numbers, underscores, hyphens, and dots between segments.',
 	ignoreExtensionDuplicate:
 		'This extension already exists in the ignore rules.',
+	projectNameName: 'Project name',
+	projectNameDesc: 'Set the project name. Leave blank to use the default.',
+	projectNamePlaceholder: 'Enter a project name (optional)',
+	projectNameInvalid: 'Project name must be at most 30 characters and contain no control characters',
 	// responses after selecting directory
 	scanRootSaved: `Scan directory saved`,
 	scanRootInvalid: `Enter a valid absolute directory path`,

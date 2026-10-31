@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type SettingData } from './setting-data';
+import { DEFAULT_SETTINGS, type SettingData, MAX_PROJECT_NAME_LENGTH } from './setting-data';
 import { DEFAULT_PLUGIN_DATA, type PluginData } from './plugin-data';
 import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
@@ -23,6 +23,7 @@ export interface DataAdapter {
 
 export interface SettingsChanges {
 	rootPath?: string;
+	projectName?: string;
 	ignorePatterns?: string[];
 	hideShadowNotesFlag?: boolean;
 }
@@ -113,6 +114,9 @@ export class PluginStateService {
 	}
 	getRootPath(): string {
 		return this.getData().settingData.fileScope.rootPath;
+	}
+	getProjectName(): string {
+		return this.getData().settingData.projectName;
 	}
 	getHideShadowNotesFlag(): boolean {
 		return this.getData().settingData.hideShadowNotesFlag;
@@ -234,7 +238,7 @@ export class PluginStateService {
 				updated: [],
 				errors: {},
 			};
-			// 1. validate and handle rootpath scanning
+			// validate and handle rootpath scanning
 			if (changes.rootPath !== undefined) {
 				const newPath = changes.rootPath.trim();
 
@@ -256,8 +260,31 @@ export class PluginStateService {
 					}
 				}
 			}
+			// Validate and update the project name.
+			if (changes.projectName !== undefined) {
+				const newName = changes.projectName.trim();
 
-			// 2. validate and handle Ignore rule
+				const hasControlCharacters = Array.from(newName).some(
+					(char) => {
+						const code = char.codePointAt(0)!;
+						return code < 32 || code === 127;
+					},
+				);
+
+				if (
+					Array.from(newName).length > MAX_PROJECT_NAME_LENGTH ||
+					hasControlCharacters
+				) {
+					result.errors.projectName =
+						new Error('Invalid project name');
+				} else if (
+					newName !== (currentData.settingData.projectName)
+				) {
+					nextData.settingData.projectName = newName;
+					result.updated.push('projectName');
+				}
+			}
+			// validate and handle Ignore rule
 			if (changes.ignorePatterns !== undefined) {
 				// Remove empty lines, but preserve other pattern characters.
 				const nextPatterns = changes.ignorePatterns.filter(
@@ -290,7 +317,7 @@ export class PluginStateService {
 				}
 			}
 
-			// 3. Update ShadowNotes visibility preference.
+			// Update ShadowNotes visibility preference.
 			if (changes.hideShadowNotesFlag !== undefined) {
 				const hidden = changes.hideShadowNotesFlag;
 
