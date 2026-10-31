@@ -26,6 +26,13 @@ type SettingsSaveFeedback =
 		error: unknown;
 	};
 
+// Defines a setting item and its visibility behavior.
+interface FilePilotSettingDefinition {
+	name: string;
+	desc?: string;
+	alwaysVisible?: boolean;
+	render: (setting: Setting) => void;
+}
 
 export class FilePilotSettingTab extends PluginSettingTab {
 	private rootPathInput?: TextComponent;
@@ -39,11 +46,12 @@ export class FilePilotSettingTab extends PluginSettingTab {
 		this.ignoreRulesSection = new IgnoreRulesSettingSection(this.filePilot.stateService);
 	}
 
-	getSettingDefinitions() {
-		return [
+	getSettingDefinitions(): FilePilotSettingDefinition[] {
+		const definitions: FilePilotSettingDefinition[] = [
 			{
 				name: t('scanRootName'),
 				desc: t('scanRootDesc'),
+				alwaysVisible: true,
 
 				render: (setting: Setting) => {
 
@@ -130,6 +138,7 @@ export class FilePilotSettingTab extends PluginSettingTab {
 
 			{
 				name: '',
+				alwaysVisible: true,
 				render: (setting: Setting) => {
 					setting.settingEl.addClass('file-pilot-settings-actions');
 
@@ -184,6 +193,19 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			},
 
 		];
+		return definitions.map(
+			({ alwaysVisible, render, ...definition }) => ({
+				...definition,
+
+				render: (setting: Setting) => {
+					render(setting);
+
+					if (!alwaysVisible) {
+						this.markRootDependent(setting);
+					}
+				},
+			}),
+		);
 	}
 
 	private async saveSettings(changes: SettingsChanges,): Promise<SettingsUpdateResult | null> {
@@ -194,6 +216,7 @@ export class FilePilotSettingTab extends PluginSettingTab {
 			// if refreshing rootpath happens in many places, use subscription.
 			if (result.updated.includes('rootPath')) {
 				this.filePilot.refreshViewRootPath();
+				this.updateRootDependentVisibility();
 			}
 			if (result.updated.includes('ignorePatterns')) {
 				this.filePilot.refreshViewFileList();
@@ -311,5 +334,34 @@ export class FilePilotSettingTab extends PluginSettingTab {
 		);
 	}
 
+	// Mark a setting as dependent on the configured root path.
+	private markRootDependent(setting: Setting): void {
+		setting.settingEl.addClass('file-pilot-requires-root');
+
+		const hasRootPath =
+			this.filePilot.stateService.getRootPath().trim() !== '';
+
+		setting.settingEl.classList.toggle(
+			'file-pilot-setting-hidden',
+			!hasRootPath,
+		);
+	}
+
+	// Update visibility after the root path changes.
+	private updateRootDependentVisibility(): void {
+		const hasRootPath =
+			this.filePilot.stateService.getRootPath().trim() !== '';
+
+		const elements = this.containerEl.querySelectorAll<HTMLElement>(
+			'.file-pilot-requires-root',
+		);
+
+		elements.forEach((element) => {
+			element.classList.toggle(
+				'file-pilot-setting-hidden',
+				!hasRootPath,
+			);
+		})
+	}
 
 }
