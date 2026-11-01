@@ -1,7 +1,9 @@
 import {
+	type App,
 	ItemView,
 	Notice,
 	Setting,
+	setIcon,
 	WorkspaceLeaf,
 } from 'obsidian';
 
@@ -87,60 +89,87 @@ export class FilePilotView extends ItemView {
 		const rootPath =
 			this.filePilot.stateService.getRootPath();
 
-		this.rootSetting = new Setting(overviewSection)
+		const rootSetting = new Setting(overviewSection)
 			.setName(
 				this.filePilot.stateService.getProjectName()
 				|| t('scanRootName')
 			)
 			.setDesc(rootPath || t('scanRootNotConfigured'))
-			.addButton((button) => {
-				button
-					.setButtonText(t('oneWayScan'))
-					.setCta()
-					.onClick(async () => {
-						if (this.scanning) {
-							return;
+		// Group the settings button and project title.
+		const titleRowEl = rootSetting.infoEl.createDiv({
+			cls: 'file-pilot-overview-title-row',
+		});
+
+		// Move the title row before the description.
+		rootSetting.nameEl.before(titleRowEl);
+
+		const settingsButton = titleRowEl.createEl('button', {
+			// cls: 'file-pilot-overview-settings-button',
+			cls: 'clickable-icon file-pilot-overview-settings-button',
+			attr: {
+				type: 'button',
+				'aria-label': 'Open file pilot settings',
+			},
+		});
+
+		setIcon(settingsButton, 'settings');
+
+		settingsButton.addEventListener('click', () => {
+			void this.openPluginSettings();
+		});
+
+		// Move the existing title into the title row.
+		titleRowEl.appendChild(rootSetting.nameEl);
+		rootSetting.addButton((button) => {
+			button
+				.setButtonText(t('oneWayScan'))
+				.setCta()
+				.onClick(async () => {
+					if (this.scanning) {
+						return;
+					}
+
+					this.scanning = true;
+					button.setDisabled(true);
+					button.setButtonText(t('scanning'));
+
+					try {
+						const result = await this.filePilot.syncFiles();
+						if (result.importedCount > 0) {
+							new Notice(t('scanCompleted', { count: result.importedCount, }));
+						} else {
+							new Notice(t('noNewImportedFile'));
 						}
+						// Update the list after a successful scan.
+						this.refreshFileList();
 
-						this.scanning = true;
-						button.setDisabled(true);
-						button.setButtonText(t('scanning'));
+					} catch (error) {
+						if (error instanceof FilePilotError) {
+							switch (error.code) {
+								case 'SYNC_IN_PROGRESS':
+									new Notice(t('syncAlreadyInProgress'));
+									return;
 
-						try {
-							const result = await this.filePilot.syncFiles();
-							if (result.importedCount > 0) {
-								new Notice(t('scanCompleted', { count: result.importedCount, }));
-							} else {
-								new Notice(t('noNewImportedFile'));
+								case 'SCAN_ROOT_NOT_CONFIGURED':
+									new Notice(t('scanRootNotConfigured'));
+									return;
+
+								case 'CLEAR_IN_PROGRESS':
+									new Notice(t('clearInProgress'));
+									return;
 							}
-							// Update the list after a successful scan.
-							this.refreshFileList();
-
-						} catch (error) {
-							if (error instanceof FilePilotError) {
-								switch (error.code) {
-									case 'SYNC_IN_PROGRESS':
-										new Notice(t('syncAlreadyInProgress'));
-										return;
-
-									case 'SCAN_ROOT_NOT_CONFIGURED':
-										new Notice(t('scanRootNotConfigured'));
-										return;
-
-									case 'CLEAR_IN_PROGRESS':
-										new Notice(t('clearInProgress'));
-										return;
-								}
-							}
-							console.error('File Pilot scan failed:', error);
-							new Notice(t('scanFailed'));
-						} finally {
-							this.scanning = false;
-							button.setDisabled(false);
-							button.setButtonText(t('oneWayScan'));
 						}
-					});
-			});
+						console.error('File Pilot scan failed:', error);
+						new Notice(t('scanFailed'));
+					} finally {
+						this.scanning = false;
+						button.setDisabled(false);
+						button.setButtonText(t('oneWayScan'));
+					}
+				});
+		});
+
+		this.rootSetting = rootSetting;
 		// Create the managed file count.
 		this.fileCountEl = overviewSection.createDiv({
 			cls: 'file-pilot-managed-count',
@@ -195,10 +224,15 @@ export class FilePilotView extends ItemView {
 		const records =
 			this.filePilot.stateService.getFileRecords();
 
+		// Count only managed files, excluding folders.
+		const fileCount = records.filter(
+			record => record.kind === 'file'
+		).length;
+
 		// Update the total number of managed files.
 		this.fileCountEl.setText(
 			t('managedFileCount', {
-				count: records.length,
+				count: fileCount,
 			})
 		);
 
@@ -271,7 +305,9 @@ export class FilePilotView extends ItemView {
 		});
 
 		infoEl.createDiv({
-			cls: 'file-pilot-file-name',
+			cls: record.kind === 'folder'
+				? 'file-pilot-file-name file-pilot-folder-name'
+				: 'file-pilot-file-name',
 			text: getFullName(record.path),
 		});
 
@@ -301,7 +337,9 @@ export class FilePilotView extends ItemView {
 
 		metaEl.createDiv({
 			cls: 'file-pilot-file-size',
-			text: formatFileSize(record.size),
+			text: record.kind === 'file'
+				? formatFileSize(record.size)
+				: '—',
 		});
 
 		const statusText =
@@ -364,6 +402,18 @@ export class FilePilotView extends ItemView {
 				error,
 			);
 		}
+	}
+
+	private async openPluginSettings(): Promise<void> {
+		const settings = (this.app as App & {
+			setting: {
+				open(): Promise<void> | void;
+				openTabById(id: string): void;
+			};
+		}).setting;
+
+		await settings.open();
+		settings.openTabById(this.filePilot.manifest.id);
 	}
 
 }

@@ -57,7 +57,8 @@ test('recursively scans regular files into ScannedFileInfo', async (t) => {
 	});
 
 	const scannedPaths = results
-		.map((file) => file.path)
+		.filter((entry) => entry.kind === 'file')
+		.map((entry) => entry.path)
 		.sort();
 
 	assert.deepEqual(scannedPaths, [
@@ -94,6 +95,7 @@ test('builds correct file name and metadata', async (t) => {
 	);
 
 	assert.ok(file);
+	assert.equal(file.kind, 'file');
 	assert.equal(file.baseName, 'c');
 	assert.equal(file.extension, 'txt');
 	assert.equal(file.size, Buffer.byteLength('text-content'));
@@ -104,6 +106,59 @@ test('builds correct file name and metadata', async (t) => {
 	}
 });
 
+
+test('scans nested and empty folders without file-only metadata', async (t) => {
+    const rootPath = await createTestFiles();
+    t.after(async () => {
+        await fs.rm(rootPath, { recursive: true, force: true });
+    });
+
+    await fs.mkdir(path.join(rootPath, 'empty'));
+    await fs.mkdir(path.join(rootPath, 'folder', 'Project.v2'));
+
+    const results = await new FileScanner().scan({
+        rootPath,
+        ignorePatterns: [],
+        watchEnabled: false,
+    });
+
+    const folders = results.filter((entry) => entry.kind === 'folder');
+    assert.deepEqual(folders.map((entry) => entry.path).sort(), [
+        'empty',
+        'folder',
+        'folder/Project.v2',
+    ]);
+
+    for (const folder of folders) {
+        assert.equal(Object.hasOwn(folder, 'size'), false);
+        assert.equal(Object.hasOwn(folder, 'extension'), false);
+        assert.ok(folder.mtimeMs > 0);
+        if (folder.nativeIdentity !== undefined) {
+            assert.match(folder.nativeIdentity, /^\d+:\d+$/);
+        }
+    }
+    assert.equal(folders.find((entry) => entry.path === 'folder/Project.v2')?.baseName, 'Project.v2');
+    assert.equal(results.some((entry) => entry.path === ''), false);
+});
+
+test('ignores directories and all descendants while retaining other folders', async (t) => {
+    const rootPath = await createTestFiles();
+    t.after(async () => {
+        await fs.rm(rootPath, { recursive: true, force: true });
+    });
+    await fs.mkdir(path.join(rootPath, 'ignored', 'nested'), { recursive: true });
+    await fs.writeFile(path.join(rootPath, 'ignored', 'nested', 'secret.txt'), 'secret');
+
+    const results = await new FileScanner().scan({
+        rootPath,
+        ignorePatterns: ['/ignored/'],
+        watchEnabled: false,
+    });
+
+    assert.equal(results.some((entry) => entry.path === 'ignored' || entry.path.startsWith('ignored/')), false);
+    assert.ok(results.some((entry) => entry.kind === 'folder' && entry.path === 'folder'));
+    assert.ok(results.some((entry) => entry.kind === 'file' && entry.path === 'folder/c.txt'));
+});
 
 async function scanIgnoreFixture(t, ignorePatterns) {
     const fixture = await createTempFileTree(IGNORE_FILE_TREE);
@@ -116,7 +171,10 @@ async function scanIgnoreFixture(t, ignorePatterns) {
         watchEnabled: false,
     });
 
-    return results.map((file) => file.path).sort();
+    return results
+        .filter((entry) => entry.kind === 'file')
+        .map((entry) => entry.path)
+        .sort();
 }
 
 test('ignores an exact root-relative file path', async (t) => {

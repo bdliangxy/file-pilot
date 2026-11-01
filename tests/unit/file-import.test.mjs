@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createFakeShadowNoteService } from '../fakes/index.mjs';
-import { makeScannedFile } from '../factories/file-record.mjs';
+import { makeScannedFile, makeScannedFolder } from '../factories/file-record.mjs';
 import { createTestJiti } from '../helpers/test-jiti.mjs';
 
 const jiti = createTestJiti(import.meta.url);
@@ -46,3 +46,40 @@ test('imports metadata and links each FileRecord to its own Shadow Note', async 
 		})),
 	);
 });
+
+test('imports folders and files with distinct Shadow Notes', async () => {
+    const service = createFakeShadowNoteService();
+    const scannedEntries = [
+        makeScannedFolder('Projects'),
+        makeScannedFolder('Projects/EmptyFolder'),
+        makeScannedFolder('Projects/Project.v2'),
+        makeScannedFile('Projects/report.pdf'),
+    ];
+
+    const records = await importScannedFiles(scannedEntries, service);
+    assert.equal(records.length, scannedEntries.length);
+    assert.deepEqual(records.map(record => record.kind), [
+        'folder', 'folder', 'folder', 'file',
+    ]);
+    assert.equal(new Set(records.map(record => record.id)).size, records.length);
+
+    for (const [index, record] of records.entries()) {
+        assert.deepEqual(record, {
+            ...scannedEntries[index],
+            id: record.id,
+            status: 'available',
+            shadowNotePath: `ShadowNotes/${scannedEntries[index].path.replaceAll('/', '_')}.md`,
+        });
+    }
+    for (const folder of records.filter(record => record.kind === 'folder')) {
+        assert.equal(Object.hasOwn(folder, 'size'), false);
+        assert.equal(Object.hasOwn(folder, 'extension'), false);
+    }
+    assert.equal(records[2].baseName, 'Project.v2');
+    assert.deepEqual(service.requestedPaths, scannedEntries.map(entry => entry.path));
+    assert.deepEqual(service.createdNotes, records.map(record => ({
+        notePath: record.shadowNotePath,
+        fileId: record.id,
+    })));
+});
+

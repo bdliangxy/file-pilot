@@ -4,6 +4,7 @@ export function makeScannedFile(path, options = {}) {
     const hasExtension = dotIndex > 0;
 
     return {
+        kind: 'file',
         path,
         nativeIdentity: options.nativeIdentity ?? '1:2',
         baseName: options.baseName ?? (
@@ -15,6 +16,18 @@ export function makeScannedFile(path, options = {}) {
                 ? fileName.slice(dotIndex + 1)
                 : null,
         size: options.size ?? 123,
+        mtimeMs: options.mtimeMs ?? 456,
+    };
+}
+
+export function makeScannedFolder(path, options = {}) {
+    const folderName = path.split('/').at(-1) ?? path;
+
+    return {
+        kind: 'folder',
+        path,
+        nativeIdentity: options.nativeIdentity ?? '1:2',
+        baseName: options.baseName ?? folderName,
         mtimeMs: options.mtimeMs ?? 456,
     };
 }

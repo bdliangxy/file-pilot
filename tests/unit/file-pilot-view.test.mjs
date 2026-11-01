@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createJiti } from 'jiti';
 import { fileURLToPath } from 'node:url';
 import { FakeElement } from '../fakes/obsidian-view.mjs';
-import { makeFileRecord } from '../factories/file-record.mjs';
+import { makeFileRecord, makeScannedFolder } from '../factories/file-record.mjs';
 
 const jiti = createJiti(import.meta.url, {
     alias: {
@@ -23,6 +23,7 @@ function setup(summaryReader = async () => null) {
         shadowNotePath: 'ShadowNotes/report.md',
     });
     let ignorePatterns = [];
+    let records = [record];
     let projectName = '';
     const listeners = new Set();
     let subscribed = 0;
@@ -44,13 +45,12 @@ function setup(summaryReader = async () => null) {
         stateService: {
             getRootPath: () => 'C:/files',
             getProjectName: () => projectName,
-            getFileRecords: () => [record],
+            getFileRecords: () => records,
             getIgnorePatterns: () => [...ignorePatterns],
         },
         shadowNoteService: {
             getFileSummary: (received) => {
                 reads++;
-                assert.equal(received.id, record.id);
                 return summaryReader(received);
             },
         },
@@ -78,6 +78,7 @@ function setup(summaryReader = async () => null) {
             }
         },
         setIgnorePatterns: (patterns) => { ignorePatterns = [...patterns]; },
+        setRecords: (nextRecords) => { records = nextRecords; },
         setProjectName: (name) => { projectName = name; },
         getOverviewTitle: () => view.rootSetting?.name,
         get reads() { return reads; },
@@ -223,5 +224,68 @@ test('overview uses the configured project name and refreshes without rebuilding
     ui.setProjectName('');
     ui.view.refreshProjectName();
     assert.equal(ui.getOverviewTitle(), 'project directory');
+    await ui.view.onClose();
+});
+
+test('overview counts files only and renders folder labels and sizes', async () => {
+    const ui = setup();
+    const folder = {
+        ...makeScannedFolder('Projects/Empty.v2'),
+        id: 'folder-1',
+        status: 'available',
+        shadowNotePath: 'ShadowNotes/Empty.v2.md',
+    };
+    ui.setRecords([ui.record, folder]);
+    await ui.view.onOpen();
+    await flush();
+
+    assert.equal(ui.find('file-pilot-managed-count').text, '1 managed files');
+    const folderName = ui.find('file-pilot-folder-name');
+    assert.ok(folderName);
+    assert.equal(folderName.text, 'Empty.v2');
+
+    const items = ui.find('file-pilot-files-section').children;
+    assert.equal(items.length, 2);
+    assert.equal(items[1].children[1].children[0].text, '—');
+    assert.equal(items[0].children[1].children[0].text, '123 B');
+    await ui.view.onClose();
+});
+
+test('folder summary and ignored status update without mutating its record', async () => {
+    const ui = setup(async (record) =>
+        record.kind === 'folder' ? 'Folder summary' : null);
+    const folder = {
+        ...makeScannedFolder('Projects/Empty.v2'),
+        id: 'folder-1',
+        status: 'available',
+        shadowNotePath: 'ShadowNotes/Empty.v2.md',
+    };
+    ui.setRecords([folder]);
+    ui.setIgnorePatterns(['/Projects/']);
+    await ui.view.onOpen();
+    await flush();
+
+    assert.equal(ui.find('file-pilot-file-status').text, 'Ignored');
+    assert.equal(ui.find('file-pilot-file-secondary').text, 'Folder summary');
+    assert.equal(folder.status, 'available');
+    ui.setIgnorePatterns([]);
+    ui.view.refreshFileList();
+    assert.equal(ui.find('file-pilot-file-status').text, 'Normal');
+    await ui.view.onClose();
+});
+
+test('settings shortcut remains beside the title after a name refresh', async () => {
+    const ui = setup();
+    await ui.view.onOpen();
+    const button = ui.find('file-pilot-overview-settings-button');
+    const row = ui.find('file-pilot-overview-title-row');
+    assert.ok(button.classes.has('clickable-icon'));
+    assert.equal(button.icon, 'settings');
+    assert.equal(button.attributes['aria-label'], 'Open file pilot settings');
+    assert.equal(button.parent, row);
+    ui.setProjectName('Renamed');
+    ui.view.refreshProjectName();
+    assert.equal(ui.find('file-pilot-overview-settings-button'), button);
+    assert.equal(row.children[1].text, 'Renamed');
     await ui.view.onClose();
 });

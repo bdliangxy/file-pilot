@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import { createFakeShadowNoteService } from '../fakes/index.mjs';
 import { makeScannedFile } from '../factories/file-record.mjs';
@@ -10,6 +13,7 @@ const { FileSyncService } = await jiti.import(
 	'../../src/core/file-sync.ts',
 );
 const { FilePilotError } = await jiti.import('../../src/error.ts');
+const { FileScanner } = await jiti.import('../../src/core/file-scanner.ts');
 
 function makeScope(rootPath = 'C:\\files') {
 	return {
@@ -224,4 +228,48 @@ test('allows retry after a failed sync', async () => {
 
 	assert.equal(scanCount, 2);
 	assert.equal(result.importedCount, 0);
+});
+
+test('real directory scan imports folders and files once, including empty folders', async (t) => {
+    const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'file-pilot-sync-folders-'));
+    t.after(() => fs.rm(rootPath, { recursive: true, force: true }));
+    await fs.mkdir(path.join(rootPath, 'Projects', 'Empty'), { recursive: true });
+    await fs.mkdir(path.join(rootPath, 'Ignored'), { recursive: true });
+    await fs.writeFile(path.join(rootPath, 'Projects', 'report.pdf'), 'report');
+    await fs.writeFile(path.join(rootPath, 'Ignored', 'secret.txt'), 'secret');
+
+    const records = [];
+    const notes = createFakeShadowNoteService();
+    let saveCount = 0;
+    const service = new FileSyncService(
+        new FileScanner(),
+        notes,
+        async (batch) => {
+            saveCount++;
+            records.push(...structuredClone(batch));
+        },
+        () => structuredClone(records),
+    );
+    const scope = { rootPath, ignorePatterns: ['/Ignored/'], watchEnabled: false };
+    const first = await service.syncFiles(scope);
+    assert.equal(first.importedCount, 3);
+    assert.deepEqual(
+        records.map(record => [record.kind, record.path]).sort((a, b) => a[1].localeCompare(b[1])),
+        [
+            ['folder', 'Projects'],
+            ['folder', 'Projects/Empty'],
+            ['file', 'Projects/report.pdf'],
+        ],
+    );
+    assert.ok(records.every(record => record.id && record.shadowNotePath));
+    assert.equal(new Set(records.map(record => record.id)).size, 3);
+    assert.equal(notes.createdNotes.length, 3);
+    const empty = records.find(record => record.path === 'Projects/Empty');
+    assert.equal(Object.hasOwn(empty, 'size'), false);
+    assert.equal(Object.hasOwn(empty, 'extension'), false);
+
+    const second = await service.syncFiles(scope);
+    assert.equal(second.importedCount, 0);
+    assert.equal(saveCount, 1);
+    assert.equal(notes.createdNotes.length, 3);
 });

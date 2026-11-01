@@ -55,6 +55,24 @@ export class FileScanner {
 				if (ignoreMatcher.ignores(`${relativePath}/`)) {
 					continue;
 				}
+
+				const stats = await fs.stat(absolutePath);
+
+				const nativeIdentity =
+					stats.dev !== 0 || stats.ino !== 0
+						? `${stats.dev}:${stats.ino}`
+						: undefined;
+
+				const scannedFolderInfo: ScannedFileInfo = {
+					kind: 'folder',
+					path: relativePath,
+					nativeIdentity,
+					baseName: entry.name,
+					mtimeMs: stats.mtimeMs,
+				};
+
+				results.push(scannedFolderInfo);
+
 				await this.scanDirectory(
 					rootPath,
 					absolutePath,
@@ -79,6 +97,7 @@ export class FileScanner {
 					: undefined;
 
 			const scannedFileInfo: ScannedFileInfo = {
+				kind: 'file',
 				path: relativePath,
 				nativeIdentity,
 				baseName: getFileBaseName(entry.name),

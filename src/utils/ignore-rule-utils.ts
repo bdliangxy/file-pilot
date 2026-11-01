@@ -92,10 +92,13 @@ export type FileDisplayStatus =
 	FileRecord['status'] | 'ignored';
 
 export function getDisplayStatus(
-	record: Pick<FileRecord, 'path' | 'status'>,
+	record: Pick<FileRecord, 'path' | 'status' | 'kind'>,
 	matcher: Ignore,
 ): FileDisplayStatus {
-	return matcher.ignores(record.path)
+	const ignorePath = record.kind === 'folder'
+		? `${record.path}/`
+		: record.path;
+	return matcher.ignores(ignorePath)
 		? 'ignored'
 		: record.status;
 }

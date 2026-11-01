@@ -42,6 +42,22 @@ test('falls back to UUID-suffixed name when all parent candidates conflict', () 
 	]);
 });
 
+test('generates Shadow Note paths for folder paths', () => {
+    const { service } = setup();
+    assert.equal(
+        service.getAvailableShadowNotePath('Projects/Reports', 'folder-1'),
+        'ShadowNotes/Reports.md',
+    );
+});
+
+test('resolves folder path naming collisions using parent names', () => {
+    const { service } = setup(['ShadowNotes/Reports.md']);
+    assert.equal(
+        service.getAvailableShadowNotePath('Projects/Reports', 'folder-1'),
+        'ShadowNotes/Projects_Reports.md',
+    );
+});
+
 test('retrieves the Shadow Note associated with a FileRecord', () => {
 	const notePath = 'ShadowNotes/report.pdf.md';
 	const { service } = setup([notePath]);

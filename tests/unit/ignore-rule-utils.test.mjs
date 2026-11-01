@@ -85,7 +85,7 @@ test('generated rules ignore selected literals but not similarly named files', (
 
 
 test('display status prioritizes ignored rules without mutating FileRecord', () => {
-    const record = { path: 'reports/a.pdf', status: 'missing' };
+    const record = { kind: 'file', path: 'reports/a.pdf', status: 'missing' };
     const original = structuredClone(record);
     const ignored = ignore().add(['/reports/']);
     assert.equal(getDisplayStatus(record, ignored), 'ignored');
@@ -101,6 +101,28 @@ test('display status respects filename, extension, and negation rules', () => {
         ['other/readme.txt', 'missing', 'missing'],
         ['private/report.txt', 'missing', 'ignored'],
     ]) {
-        assert.equal(getDisplayStatus({ path, status }, matcher), expected, path);
+        assert.equal(getDisplayStatus({ kind: 'file', path, status }, matcher), expected, path);
     }
+});
+
+test('display status matches directory rules and preserves the record', () => {
+    const matcher = ignore().add(['/reports/']);
+    const folder = { kind: 'folder', path: 'reports', status: 'missing' };
+    const original = structuredClone(folder);
+    assert.equal(getDisplayStatus(folder, matcher), 'ignored');
+    assert.deepEqual(folder, original);
+    assert.equal(getDisplayStatus(folder, ignore()), 'missing');
+});
+
+test('display status distinguishes ignored folders and their descendants', () => {
+    const matcher = ignore().add(['/Projects/']);
+    const records = [
+        { kind: 'folder', path: 'Projects', status: 'available' },
+        { kind: 'folder', path: 'Projects/Archive', status: 'available' },
+        { kind: 'file', path: 'Projects/report.pdf', status: 'available' },
+        { kind: 'folder', path: 'ProjectsBackup', status: 'available' },
+    ];
+    assert.deepEqual(records.map(record => getDisplayStatus(record, matcher)), [
+        'ignored', 'ignored', 'ignored', 'available',
+    ]);
 });

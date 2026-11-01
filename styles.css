@@ -271,6 +271,12 @@
 	text-overflow: ellipsis;
 }
 
+/* Underline folder names in the file list. */
+.file-pilot-folder-name {
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
 /* Shared secondary text style. */
 .file-pilot-file-secondary {
 	min-width: 0;
@@ -373,4 +379,17 @@ body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explor
 /* Hide settings until the root path is configured. */
 .file-pilot-setting-hidden {
 	display: none !important;
+}
+
+/* Disable the tooltip for the overview settings icon. */
+.file-pilot-overview-settings-button {
+	--no-tooltip: true;
+}
+
+/* Place the settings button and project title on the same row. */
+.file-pilot-overview-title-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
 }
