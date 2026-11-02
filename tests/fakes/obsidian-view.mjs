@@ -64,6 +64,16 @@ export class FakeElement {
         this.listeners.set(event, listeners);
     }
 
+    setAttribute(name, value) {
+        this.attributes[name] = value;
+    }
+
+    dispatch(event) {
+        for (const callback of this.listeners.get(event) ?? []) {
+            callback({ target: this });
+        }
+    }
+
     click() {
         for (const callback of this.listeners.get('click') ?? []) {
             callback();
@@ -109,6 +119,39 @@ export class Setting {
             onClick(handler) { element.addEventListener('click', handler); return this; },
             setDisabled(disabled) { element.disabled = disabled; return this; },
         });
+        return this;
+    }
+
+    addSearch(callback) {
+        const inputEl = this.controlEl.createEl('input');
+        inputEl.value = '';
+        const search = {
+            inputEl,
+            setPlaceholder(value) { inputEl.placeholder = value; return this; },
+            setValue(value) { inputEl.value = value; return this; },
+            onChange(handler) {
+                inputEl.addEventListener('input', () => handler(inputEl.value));
+                return this;
+            },
+        };
+        callback(search);
+        return this;
+    }
+
+    addDropdown(callback) {
+        const selectEl = this.controlEl.createEl('select');
+        selectEl.options = new Map();
+        selectEl.value = '';
+        const dropdown = {
+            selectEl,
+            addOption(value, label) { selectEl.options.set(value, label); return this; },
+            setValue(value) { selectEl.value = value; return this; },
+            onChange(handler) {
+                selectEl.addEventListener('change', () => handler(selectEl.value));
+                return this;
+            },
+        };
+        callback(dropdown);
         return this;
     }
 }

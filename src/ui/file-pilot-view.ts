@@ -16,13 +16,21 @@ import {
 	getAbsoluteFilePath,
 } from '../utils/path-utils';
 import { formatFileSize } from '../utils/file-utils';
-import ignore from 'ignore';
+import ignore, { type Ignore } from 'ignore';
 
 import {
 	getDisplayStatus,
 	type FileDisplayStatus,
 } from '../utils/ignore-rule-utils';
+import {
+	searchFileRecords,
+	type FileSearchCriteria,
+} from '../utils/file-search-utils';
 
+import {
+	filterFileRecords,
+	type FileFilterCriteria,
+} from '../utils/file-filter-utils';
 export const VIEW_TYPE = 'file-pilot-view';
 interface FileItemState {
 	record: FileRecord;
@@ -38,6 +46,14 @@ export class FilePilotView extends ItemView {
 
 	private fileCountEl: HTMLDivElement | null = null;
 	private filesSectionEl: HTMLDivElement | null = null;
+
+	private searchCriteria: FileSearchCriteria = {
+		query: '',
+	};
+
+	private filterCriteria: FileFilterCriteria = {
+		status: 'all',
+	};
 	// Maps Shadow Note paths to their corresponding File Item UI elements.
 	private readonly mapNotePathItemState =
 		new Map<string, FileItemState>();
@@ -175,7 +191,50 @@ export class FilePilotView extends ItemView {
 			cls: 'file-pilot-managed-count',
 		});
 
-		// The search section will be inserted here in the future.
+		// Search section.
+		const searchSection = contentEl.createDiv({
+			cls: 'file-pilot-search-section',
+		});
+
+		new Setting(searchSection)
+			.addSearch(search => {
+				search
+					.setPlaceholder(t('fileSearchPlaceholder'))
+					.setValue(this.searchCriteria.query)
+					.onChange(value => {
+						this.searchCriteria.query = value;
+						this.refreshQueryResults();
+					});
+			});
+
+		// Filter section.
+		const filterSection = contentEl.createDiv({
+			cls: 'file-pilot-filter-section',
+		});
+
+		const filterSetting = new Setting(filterSection);
+
+		filterSetting.addDropdown(dropdown => {
+			dropdown
+				.addOption('all', t('filterStatusAll'))
+				.addOption('available', t('fileStatusAvailable'))
+				.addOption('missing', t('fileStatusMissing'))
+				.addOption('ignored', t('fileStatusIgnored'))
+				.setValue(this.filterCriteria.status)
+				.onChange(value => {
+					this.filterCriteria.status =
+						value as FileFilterCriteria['status'];
+
+					this.refreshQueryResults();
+				});
+
+			dropdown.selectEl.setAttribute(
+				'aria-label',
+				t('filterStatusLabel'),
+			);
+		});
+
+		// Future filters can be added to filterSetting.
 
 		// Create the scrollable files section.
 		this.filesSectionEl = contentEl.createDiv({
@@ -236,11 +295,45 @@ export class FilePilotView extends ItemView {
 			})
 		);
 
-		// Render the file list.
-		this.renderFileList(records);
+		// Build the ignore matcher for the current refresh.
+		const matcher = ignore().add(
+			this.filePilot.stateService.getIgnorePatterns(),
+		);
+
+		// Create a temporary result set from all records.
+		let draft: FileRecord[] = records;
+
+		// Apply the enabled filter.
+		if (this.filterCriteria.status !== 'all') {
+			draft = filterFileRecords(
+				draft,
+				matcher,
+				this.filterCriteria,
+			);
+		}
+
+		// Apply the enabled search.
+		if (this.searchCriteria.query.trim() !== '') {
+			draft = searchFileRecords(
+				draft,
+				this.searchCriteria,
+			);
+		}
+
+		// Render the resulting records.
+		this.renderFileList(
+			draft,
+			matcher,
+			records.length > 0,
+		);
+
 	}
 
-	private renderFileList(records: FileRecord[]): void {
+	private renderFileList(
+		records: FileRecord[],
+		matcher: Ignore,
+		hasSourceRecords: boolean,
+	): void {
 		const listEl = this.filesSectionEl;
 
 		if (!listEl) {
@@ -257,14 +350,13 @@ export class FilePilotView extends ItemView {
 		if (records.length === 0) {
 			listEl.createDiv({
 				cls: 'file-pilot-file-empty',
-				text: t('emptyFileList'),
+				text: hasSourceRecords
+					? t('noMatchingFiles')
+					: t('emptyFileList'),
 			});
 			return;
 		}
 		const rootPath = this.filePilot.stateService.getRootPath();
-		const matcher = ignore().add(
-			this.filePilot.stateService.getIgnorePatterns(),
-		);
 
 		// // Render file items.
 		for (const record of records) {
@@ -414,6 +506,15 @@ export class FilePilotView extends ItemView {
 
 		await settings.open();
 		settings.openTabById(this.filePilot.manifest.id);
+	}
+
+	private refreshQueryResults(): void {
+		// Reset the scroll position when query conditions change.
+		if (this.filesSectionEl) {
+			this.filesSectionEl.scrollTop = 0;
+		}
+
+		this.refreshFileList();
 	}
 
 }

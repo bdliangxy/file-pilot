@@ -180,7 +180,7 @@
 	align-items: center;
 
 	padding: 12px;
-	margin-bottom: 16px;
+	margin-bottom: 5px;
 
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
@@ -392,4 +392,63 @@ body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explor
 	align-items: center;
 	gap: 6px;
 	min-width: 0;
+}
+
+/* Search section. */
+.file-pilot-search-section {
+	flex-shrink: 0;
+	margin-bottom: -3px;
+}
+
+/* Filter section. */
+.file-pilot-filter-section {
+	flex-shrink: 0;
+	margin-bottom: -7px;
+}
+
+/* Remove default Setting spacing. */
+.file-pilot-search-section .setting-item,
+.file-pilot-filter-section .setting-item {
+	padding: 0;
+	border: none;
+}
+
+.file-pilot-search-section .setting-item-info,
+.file-pilot-filter-section .setting-item-info {
+	display: none;
+}
+
+/* Full-width search. */
+.file-pilot-search-section .setting-item-control {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+}
+
+.file-pilot-search-section .search-input-container {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.file-pilot-search-section input {
+	width: 100%;
+}
+
+/* Allow filter controls to wrap onto new lines. */
+.file-pilot-filter-section .setting-item-control {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-start;
+	gap: 8px;
+	width: 100%;
+
+}
+
+.file-pilot-filter-section select {
+	max-width: 100%;
+}
+
+/* Remove the filter container background. */
+.file-pilot-filter-section .setting-item {
+	background-color: transparent !important;
 }

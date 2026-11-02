@@ -83,4 +83,8 @@ export const en = {
 	clearAllDataSuccess: `Data cleared successfully`,
 	clearAllDataFailed: 'Failed to clear data',
 	clearInProgress: `Data clearing in progress`,
+	fileSearchPlaceholder: 'Search files or paths...',
+	filterStatusAll: 'All statuses',
+	filterStatusLabel: 'Filter by status',
+	noMatchingFiles: 'No matching files or folders',
 } as const;

@@ -92,6 +92,75 @@ async function flush() {
     await new Promise((resolve) => setImmediate(resolve));
 }
 
+// Locate native-like controls in the fake DOM without relying on Setting internals.
+function findTag(element, tag) {
+    if (!element) return null;
+    if (element.tag === tag) return element;
+    for (const child of element.children) {
+        const match = findTag(child, tag);
+        if (match) return match;
+    }
+    return null;
+}
+
+function searchInput(ui) {
+    const input = findTag(ui.find('file-pilot-search-section'), 'input');
+    assert.ok(input, 'Search input should exist');
+    return input;
+}
+
+function statusSelect(ui) {
+    const select = findTag(ui.find('file-pilot-filter-section'), 'select');
+    assert.ok(select, 'Status selector should exist');
+    return select;
+}
+
+function changeSearch(ui, value) {
+    const input = searchInput(ui);
+    input.value = value;
+    input.dispatch('input');
+}
+
+function changeStatus(ui, value) {
+    const select = statusSelect(ui);
+    assert.ok(select.options.has(value), `Unknown status option: ${value}`);
+    select.value = value;
+    select.dispatch('change');
+}
+
+function visibleNames(ui) {
+    return ui.find('file-pilot-files-section').children
+        .filter(item => item.classes.has('file-pilot-file-item'))
+        .map(item => item.children[0].children[0].text);
+}
+
+function makeQueryRecords() {
+    return [
+        makeFileRecord('available-report', {
+            path: 'Docs/report.pdf',
+            shadowNotePath: 'ShadowNotes/Docs_report.md',
+        }),
+        makeFileRecord('missing-report', {
+            path: 'Archive/report.pdf',
+            status: 'missing',
+            shadowNotePath: 'ShadowNotes/Archive_report.md',
+        }),
+        makeFileRecord('ignored-report', {
+            path: 'Private/report.pdf',
+            shadowNotePath: 'ShadowNotes/Private_report.md',
+        }),
+        makeFileRecord('missing-private', {
+            path: 'Private/missing-report.pdf',
+            status: 'missing',
+            shadowNotePath: 'ShadowNotes/Private_missing-report.md',
+        }),
+        makeFileRecord('notes', {
+            path: 'Docs/notes.txt',
+            shadowNotePath: 'ShadowNotes/Docs_notes.md',
+        }),
+    ];
+}
+
 test('renders the summary and refreshes only for the matching Shadow Note', async () => {
     let summary = 'Initial summary';
     const ui = setup(async () => summary);
@@ -194,12 +263,14 @@ test('refreshing the view switches ignored status back without changing FileReco
     await ui.view.onClose();
 });
 
-test('refresh keeps missing status when a matching ignore rule is removed', async () => {
+test('refresh keeps missing status above ignored when ignore rules change', async () => {
     const ui = setup();
     ui.record.status = 'missing';
     ui.setIgnorePatterns(['/docs/']);
     await ui.view.onOpen();
-    assert.equal(ui.find('file-pilot-file-status').text, 'Ignored');
+    const initialStatus = ui.find('file-pilot-file-status');
+    assert.equal(initialStatus.text, 'Missing');
+    assert.ok(initialStatus.classes.has('file-pilot-status-missing'));
 
     ui.setIgnorePatterns([]);
     ui.view.refreshFileList();
@@ -287,5 +358,128 @@ test('settings shortcut remains beside the title after a name refresh', async ()
     ui.view.refreshProjectName();
     assert.equal(ui.find('file-pilot-overview-settings-button'), button);
     assert.equal(row.children[1].text, 'Renamed');
+    await ui.view.onClose();
+});
+
+test('search and status controls apply their intersection and restore all records', async () => {
+    const ui = setup();
+    const records = makeQueryRecords();
+    const before = structuredClone(records);
+    ui.setRecords(records);
+    ui.setIgnorePatterns(['/Private/']);
+    await ui.view.onOpen();
+
+    assert.equal(searchInput(ui).value, '');
+    assert.equal(statusSelect(ui).value, 'all');
+    assert.deepEqual([...statusSelect(ui).options.keys()], ['all', 'available', 'missing', 'ignored']);
+    assert.equal(ui.find('file-pilot-managed-count').text, '5 managed files');
+    assert.equal(visibleNames(ui).length, 5);
+
+    changeSearch(ui, 'REPORT');
+    assert.deepEqual(visibleNames(ui), ['report.pdf', 'report.pdf', 'report.pdf', 'missing-report.pdf']);
+    changeStatus(ui, 'missing');
+    assert.deepEqual(visibleNames(ui), ['report.pdf', 'missing-report.pdf']);
+    changeStatus(ui, 'ignored');
+    assert.deepEqual(visibleNames(ui), ['report.pdf']);
+    changeSearch(ui, 'notes');
+    assert.deepEqual(visibleNames(ui), []);
+    assert.equal(ui.find('file-pilot-file-empty').text, 'No matching files or folders');
+
+    changeSearch(ui, '');
+    assert.deepEqual(visibleNames(ui), ['report.pdf']);
+    changeStatus(ui, 'all');
+    assert.equal(visibleNames(ui).length, 5);
+    assert.equal(ui.find('file-pilot-managed-count').text, '5 managed files');
+    assert.deepEqual(records, before);
+    await ui.view.onClose();
+});
+
+test('search and filter preserve each other on refresh and respond to ignore changes', async () => {
+    const ui = setup();
+    ui.setRecords(makeQueryRecords());
+    ui.setIgnorePatterns(['/Private/']);
+    await ui.view.onOpen();
+
+    changeSearch(ui, 'Private');
+    changeStatus(ui, 'ignored');
+    assert.deepEqual(visibleNames(ui), ['report.pdf']);
+    ui.setIgnorePatterns([]);
+    ui.view.refreshFileList();
+    assert.deepEqual(visibleNames(ui), []);
+    assert.equal(searchInput(ui).value, 'Private');
+    assert.equal(statusSelect(ui).value, 'ignored');
+
+    ui.setIgnorePatterns(['/Private/']);
+    ui.view.refreshFileList();
+    assert.deepEqual(visibleNames(ui), ['report.pdf']);
+    ui.setRecords([...makeQueryRecords(), makeFileRecord('new', {
+        path: 'Private/new.pdf',
+        shadowNotePath: 'ShadowNotes/new.md',
+    })]);
+    ui.view.refreshFileList();
+    assert.deepEqual(visibleNames(ui), ['report.pdf', 'new.pdf']);
+    assert.equal(ui.find('file-pilot-managed-count').text, '6 managed files');
+    await ui.view.onClose();
+});
+
+test('query changes reset scroll but background list refresh preserves it', async () => {
+    const ui = setup();
+    ui.setRecords(makeQueryRecords());
+    await ui.view.onOpen();
+    const list = ui.find('file-pilot-files-section');
+    list.scrollTop = 125;
+    changeSearch(ui, 'report');
+    assert.equal(list.scrollTop, 0);
+    list.scrollTop = 76;
+    ui.view.refreshFileList();
+    assert.equal(list.scrollTop, 76);
+    changeStatus(ui, 'missing');
+    assert.equal(list.scrollTop, 0);
+    await ui.view.onClose();
+});
+
+test('empty database and unmatched query use different empty messages', async () => {
+    const ui = setup();
+    ui.setRecords([]);
+    await ui.view.onOpen();
+    assert.equal(ui.find('file-pilot-file-empty').text, 'No managed files yet in project directory');
+    changeSearch(ui, 'nonexistent');
+    assert.equal(ui.find('file-pilot-file-empty').text, 'No managed files yet in project directory');
+    ui.setRecords(makeQueryRecords());
+    ui.view.refreshFileList();
+    assert.equal(ui.find('file-pilot-file-empty').text, 'No matching files or folders');
+    await ui.view.onClose();
+});
+
+test('reopening the view restores search and status controls from criteria', async () => {
+    const ui = setup();
+    ui.setRecords(makeQueryRecords());
+    await ui.view.onOpen();
+    changeSearch(ui, 'Archive');
+    changeStatus(ui, 'missing');
+    assert.deepEqual(visibleNames(ui), ['report.pdf']);
+    await ui.view.onClose();
+    await ui.view.onOpen();
+    assert.equal(searchInput(ui).value, 'Archive');
+    assert.equal(statusSelect(ui).value, 'missing');
+    assert.deepEqual(visibleNames(ui), ['report.pdf']);
+    await ui.view.onClose();
+});
+
+test('search matches managed folders and does not change their metadata', async () => {
+    const ui = setup();
+    const folder = {
+        ...makeScannedFolder('Projects/合同资料'),
+        id: 'folder-cn',
+        status: 'available',
+        shadowNotePath: 'ShadowNotes/folder-cn.md',
+    };
+    ui.setRecords([folder, ...makeQueryRecords()]);
+    await ui.view.onOpen();
+    changeSearch(ui, '合同');
+    assert.deepEqual(visibleNames(ui), ['合同资料']);
+    assert.equal(ui.find('file-pilot-managed-count').text, '5 managed files');
+    changeStatus(ui, 'missing');
+    assert.deepEqual(visibleNames(ui), []);
     await ui.view.onClose();
 });

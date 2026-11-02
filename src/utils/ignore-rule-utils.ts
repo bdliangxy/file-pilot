@@ -98,7 +98,11 @@ export function getDisplayStatus(
 	const ignorePath = record.kind === 'folder'
 		? `${record.path}/`
 		: record.path;
+	if (record.status === 'missing') {
+		return 'missing';
+	}
+
 	return matcher.ignores(ignorePath)
 		? 'ignored'
-		: record.status;
+		: 'available';
 }

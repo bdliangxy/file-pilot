@@ -81,4 +81,8 @@ export const zh = {
 	clearAllDataSuccess: `成功清空数据`,
 	clearAllDataFailed: '清空数据失败',
 	clearInProgress: `正在清空数据`,
+	fileSearchPlaceholder: '检索文件名或路径...',
+	filterStatusAll: '全部状态',
+	filterStatusLabel: '按状态筛选',
+	noMatchingFiles: '没有匹配的文件或文件夹',
 } satisfies Record<keyof typeof en, string>;
