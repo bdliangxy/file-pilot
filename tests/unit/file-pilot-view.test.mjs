@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createJiti } from 'jiti';
 import { fileURLToPath } from 'node:url';
-import { FakeElement } from '../fakes/obsidian-view.mjs';
+import { FakeElement, Notice } from '../fakes/obsidian-view.mjs';
 import { makeFileRecord, makeScannedFolder } from '../factories/file-record.mjs';
 
 const jiti = createJiti(import.meta.url, {
@@ -298,7 +298,7 @@ test('overview uses the configured project name and refreshes without rebuilding
     await ui.view.onClose();
 });
 
-test('overview counts files only and renders folder labels and sizes', async () => {
+test('overview counts files and folders separately and renders folder labels and sizes', async () => {
     const ui = setup();
     const folder = {
         ...makeScannedFolder('Projects/Empty.v2'),
@@ -310,7 +310,7 @@ test('overview counts files only and renders folder labels and sizes', async () 
     await ui.view.onOpen();
     await flush();
 
-    assert.equal(ui.find('file-pilot-managed-count').text, '1 managed files');
+    assert.equal(ui.find('file-pilot-managed-count').text, 'Managed: 1 files, 1 folders');
     const folderName = ui.find('file-pilot-folder-name');
     assert.ok(folderName);
     assert.equal(folderName.text, 'Empty.v2');
@@ -319,6 +319,31 @@ test('overview counts files only and renders folder labels and sizes', async () 
     assert.equal(items.length, 2);
     assert.equal(items[1].children[1].children[0].text, '—');
     assert.equal(items[0].children[1].children[0].text, '123 B');
+    await ui.view.onClose();
+});
+
+test('overview updates counts after refresh and keeps totals independent of search filters', async () => {
+    const ui = setup();
+    const folder = {
+        ...makeScannedFolder('Projects/Empty'),
+        id: 'folder-1',
+        status: 'available',
+        shadowNotePath: 'ShadowNotes/Empty.md',
+    };
+    ui.setRecords([folder]);
+    await ui.view.onOpen();
+
+    assert.equal(ui.find('file-pilot-managed-count').text, 'Managed: 0 files, 1 folders');
+    changeSearch(ui, 'missing-name');
+    assert.deepEqual(visibleNames(ui), []);
+    assert.equal(ui.find('file-pilot-managed-count').text, 'Managed: 0 files, 1 folders');
+
+    ui.setRecords([folder, ui.record]);
+    ui.view.refreshFileList();
+    assert.equal(ui.find('file-pilot-managed-count').text, 'Managed: 1 files, 1 folders');
+    ui.setRecords([]);
+    ui.view.refreshFileList();
+    assert.equal(ui.find('file-pilot-managed-count').text, 'Managed: 0 files, 0 folders');
     await ui.view.onClose();
 });
 
@@ -342,6 +367,35 @@ test('folder summary and ignored status update without mutating its record', asy
     ui.setIgnorePatterns([]);
     ui.view.refreshFileList();
     assert.equal(ui.find('file-pilot-file-status').text, 'Normal');
+    await ui.view.onClose();
+});
+
+test('scan notice reports file and folder imports and no new entries', async () => {
+    const ui = setup();
+    let result = {
+        importedCount: 3,
+        importedFileCount: 1,
+        importedFolderCount: 2,
+    };
+    ui.view.filePilot.syncFiles = async () => result;
+    await ui.view.onOpen();
+    const scanButton = ui.view.rootSetting.controlEl.children[0];
+    Notice.messages.length = 0;
+
+    scanButton.click();
+    await flush();
+    assert.equal(Notice.messages.at(-1), 'Imported 1 files and 2 folders');
+
+    result = { importedCount: 1, importedFileCount: 0, importedFolderCount: 1 };
+    scanButton.click();
+    await flush();
+    assert.equal(Notice.messages.at(-1), 'Imported 0 files and 1 folders');
+
+    result = { importedCount: 0, importedFileCount: 0, importedFolderCount: 0 };
+    scanButton.click();
+    await flush();
+    assert.equal(Notice.messages.at(-1), 'No new files or folders imported');
+    assert.equal(Notice.messages.length, 3);
     await ui.view.onClose();
 });
 
@@ -372,7 +426,7 @@ test('search and status controls apply their intersection and restore all record
     assert.equal(searchInput(ui).value, '');
     assert.equal(statusSelect(ui).value, 'all');
     assert.deepEqual([...statusSelect(ui).options.keys()], ['all', 'available', 'missing', 'ignored']);
-    assert.equal(ui.find('file-pilot-managed-count').text, '5 managed files');
+    assert.equal(ui.find('file-pilot-managed-count').text, 'Managed: 5 files, 0 folders');
     assert.equal(visibleNames(ui).length, 5);
 
     changeSearch(ui, 'REPORT');
@@ -389,7 +443,7 @@ test('search and status controls apply their intersection and restore all record
     assert.deepEqual(visibleNames(ui), ['report.pdf']);
     changeStatus(ui, 'all');
     assert.equal(visibleNames(ui).length, 5);
-    assert.equal(ui.find('file-pilot-managed-count').text, '5 managed files');
+    assert.equal(ui.find('file-pilot-managed-count').text, 'Managed: 5 files, 0 folders');
     assert.deepEqual(records, before);
     await ui.view.onClose();
 });
@@ -418,7 +472,7 @@ test('search and filter preserve each other on refresh and respond to ignore cha
     })]);
     ui.view.refreshFileList();
     assert.deepEqual(visibleNames(ui), ['report.pdf', 'new.pdf']);
-    assert.equal(ui.find('file-pilot-managed-count').text, '6 managed files');
+    assert.equal(ui.find('file-pilot-managed-count').text, 'Managed: 6 files, 0 folders');
     await ui.view.onClose();
 });
 
@@ -442,9 +496,9 @@ test('empty database and unmatched query use different empty messages', async ()
     const ui = setup();
     ui.setRecords([]);
     await ui.view.onOpen();
-    assert.equal(ui.find('file-pilot-file-empty').text, 'No managed files yet in project directory');
+    assert.equal(ui.find('file-pilot-file-empty').text, 'No managed files or folders yet in project directory');
     changeSearch(ui, 'nonexistent');
-    assert.equal(ui.find('file-pilot-file-empty').text, 'No managed files yet in project directory');
+    assert.equal(ui.find('file-pilot-file-empty').text, 'No managed files or folders yet in project directory');
     ui.setRecords(makeQueryRecords());
     ui.view.refreshFileList();
     assert.equal(ui.find('file-pilot-file-empty').text, 'No matching files or folders');
@@ -478,7 +532,7 @@ test('search matches managed folders and does not change their metadata', async 
     await ui.view.onOpen();
     changeSearch(ui, '合同');
     assert.deepEqual(visibleNames(ui), ['合同资料']);
-    assert.equal(ui.find('file-pilot-managed-count').text, '5 managed files');
+    assert.equal(ui.find('file-pilot-managed-count').text, 'Managed: 5 files, 1 folders');
     changeStatus(ui, 'missing');
     assert.deepEqual(visibleNames(ui), []);
     await ui.view.onClose();

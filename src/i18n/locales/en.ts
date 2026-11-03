@@ -58,20 +58,25 @@ export const en = {
 	scanRootSaved: `Scan directory saved`,
 	scanRootInvalid: `Enter a valid absolute directory path`,
 	scanRootNotFound: `The directory does not exist or is not accessible`,
-	scanRootLocked: `Cannot change the project directory while file records exist`,
+	scanRootLocked:
+		'Cannot change the project directory while managed records exist',
 	scanRootSaveFailed: `Failed to save the directory`,
 	scanRootBrowseFailed: `Folder picker is unavailable. Enter the path manually.`,
 	// file pilot view
 	oneWayScan: `One-way scan`,
 	scanRootNotConfigured: `Please add a folder in the plugin settings page first`,
-	scanCompleted: `Imported {count} files`,
-	noNewImportedFile: 'No imported File',
+	scanCompleted:
+		'Imported {fileCount} files and {folderCount} folders',
+	noNewImportedEntries:
+		'No new files or folders imported',
 	SameNameFile: `The Shadow Note for file {fileName} has a naming conflict. ${pluginName} has appended a UUID to the end. It is strongly recommended that you manually rename the file.`,
 	scanFailed: `Scan failed`,
 	scanning: `scanning folder`,
 	syncAlreadyInProgress: `Sync already in progress`,
-	managedFileCount: '{count} managed files',
-	emptyFileList: 'No managed files yet in project directory',
+	managedEntryCount:
+		'Managed: {fileCount} files, {folderCount} folders',
+	emptyFileList:
+		'No managed files or folders yet in project directory',
 	fileStatusAvailable: 'Normal',
 	fileStatusMissing: 'Missing',
 	fileStatusIgnored: 'Ignored',

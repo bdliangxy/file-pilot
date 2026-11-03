@@ -7,6 +7,8 @@ import { FilePilotError } from '../error';
 
 export interface SyncResult {
 	importedCount: number;
+	importedFileCount: number;
+	importedFolderCount: number;
 }
 
 export class FileSyncService {
@@ -63,10 +65,17 @@ export class FileSyncService {
 			if (newRecords.length > 0) {
 				await this.addFileRecords(newRecords);
 			}
+			const importedFileCount = newRecords.filter(
+				record => record.kind === 'file'
+			).length;
 
+			const importedFolderCount =
+				newRecords.length - importedFileCount;
 
 			return {
 				importedCount: newRecords.length,
+				importedFileCount,
+				importedFolderCount,
 			};
 		} finally {
 			this.syncInProgress = false;

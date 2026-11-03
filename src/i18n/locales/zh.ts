@@ -20,7 +20,8 @@ export const zh = {
 	scanRootSaved: `扫描目录已保存`,
 	scanRootInvalid: `请输入有效的绝对目录路径`,
 	scanRootNotFound: `目录不存在或无法访问`,
-	scanRootLocked: `已有文件记录，暂不支持修改项目文件夹`,
+	scanRootLocked:
+		'已有文件或文件夹记录，暂不支持修改项目文件夹',
 	scanRootSaveFailed: `保存扫描目录失败`,
 	scanRootBrowseFailed: `无法打开文件夹选择窗口，请手动输入路径`,
 	settingsSave: '保存设置',
@@ -63,14 +64,18 @@ export const zh = {
 
 	oneWayScan: `单向扫描`,
 	scanRootNotConfigured: `请先在插件设置页添加文件夹`,
-	scanCompleted: `已导入 {count} 个文件`,
-	noNewImportedFile: '无新文件导入',
+	scanCompleted:
+		'已导入 {fileCount} 个文件、{folderCount} 个文件夹',
+	noNewImportedEntries:
+		'无新文件或文件夹导入',
 	SameNameFile: `文件 {fileName} 的影子笔记存在命名冲突，${pluginName}已在影子笔记后面添加UUID，强烈建议手动修改文件名`,
 	scanFailed: `扫描失败`,
 	scanning: `扫描文件夹中`,
 	syncAlreadyInProgress: `正在同步中`,
-	managedFileCount: '已管理 {count} 个文件',
-	emptyFileList: '项目文件夹中暂无文件',
+	managedEntryCount:
+		'已管理 {fileCount} 个文件、{folderCount} 个文件夹',
+	emptyFileList:
+		'项目文件夹中暂无受管理的文件或文件夹',
 	fileStatusAvailable: '正常',
 	fileStatusMissing: '缺失',
 	fileStatusIgnored: '被忽略',

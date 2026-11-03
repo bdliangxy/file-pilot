@@ -51,6 +51,8 @@ test('scans, imports, and persists records', async () => {
 
 	assert.deepEqual(scanCalls, [scope]);
 	assert.equal(result.importedCount, 2);
+	assert.equal(result.importedFileCount, 2);
+	assert.equal(result.importedFolderCount, 0);
 	assert.equal(persistedBatches.length, 1);
 	assert.equal(persistedBatches[0].length, 2);
 	assert.deepEqual(
@@ -97,7 +99,11 @@ test('repeated scans reuse existing records without creating duplicate Shadow No
 
 	assert.equal(scanCount, 2);
 	assert.equal(firstResult.importedCount, 2);
+	assert.equal(firstResult.importedFileCount, 2);
+	assert.equal(firstResult.importedFolderCount, 0);
 	assert.equal(secondResult.importedCount, 0);
+	assert.equal(secondResult.importedFileCount, 0);
+	assert.equal(secondResult.importedFolderCount, 0);
 	assert.equal(persistCount, 1);
 	assert.deepEqual(storedRecords, firstRecords);
 	assert.deepEqual(shadowNoteService.createdNotes, firstNotes);
@@ -228,6 +234,8 @@ test('allows retry after a failed sync', async () => {
 
 	assert.equal(scanCount, 2);
 	assert.equal(result.importedCount, 0);
+	assert.equal(result.importedFileCount, 0);
+	assert.equal(result.importedFolderCount, 0);
 });
 
 test('real directory scan imports folders and files once, including empty folders', async (t) => {
@@ -253,6 +261,8 @@ test('real directory scan imports folders and files once, including empty folder
     const scope = { rootPath, ignorePatterns: ['/Ignored/'], watchEnabled: false };
     const first = await service.syncFiles(scope);
     assert.equal(first.importedCount, 3);
+    assert.equal(first.importedFileCount, 1);
+    assert.equal(first.importedFolderCount, 2);
     assert.deepEqual(
         records.map(record => [record.kind, record.path]).sort((a, b) => a[1].localeCompare(b[1])),
         [
@@ -270,6 +280,8 @@ test('real directory scan imports folders and files once, including empty folder
 
     const second = await service.syncFiles(scope);
     assert.equal(second.importedCount, 0);
+    assert.equal(second.importedFileCount, 0);
+    assert.equal(second.importedFolderCount, 0);
     assert.equal(saveCount, 1);
     assert.equal(notes.createdNotes.length, 3);
 });

@@ -152,9 +152,12 @@ export class FilePilotView extends ItemView {
 					try {
 						const result = await this.filePilot.syncFiles();
 						if (result.importedCount > 0) {
-							new Notice(t('scanCompleted', { count: result.importedCount, }));
+							new Notice(t('scanCompleted', {
+								fileCount: result.importedFileCount,
+								folderCount: result.importedFolderCount,
+							}));
 						} else {
-							new Notice(t('noNewImportedFile'));
+							new Notice(t('noNewImportedEntries'));
 						}
 						// Update the list after a successful scan.
 						this.refreshFileList();
@@ -283,15 +286,19 @@ export class FilePilotView extends ItemView {
 		const records =
 			this.filePilot.stateService.getFileRecords();
 
-		// Count only managed files, excluding folders.
+		// Count managed files and folders separately.
 		const fileCount = records.filter(
 			record => record.kind === 'file'
 		).length;
 
-		// Update the total number of managed files.
+		const folderCount =
+			records.length - fileCount;
+
+		// Update the managed entry count.
 		this.fileCountEl.setText(
-			t('managedFileCount', {
-				count: fileCount,
+			t('managedEntryCount', {
+				fileCount,
+				folderCount,
 			})
 		);
 
