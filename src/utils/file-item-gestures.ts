@@ -1,0 +1,152 @@
+
+/**
+ * Actions supported by the file operation service.
+ */
+export type FileItemOpenAction =
+	| 'openSource'
+	| 'openContainingFolder'
+	| 'openShadowNote';
+
+/**
+ * All actions that can be triggered by mouse gestures.
+ */
+export type FileItemAction =
+	| FileItemOpenAction
+	| 'editSummary';
+
+/**
+ * Interactive regions within a file item.
+ */
+
+export type FileItemRegion =
+	| 'item'
+	| 'secondary';
+
+/**
+ * Supported mouse event types.
+ */
+export type FileItemGestureEventType =
+	| 'click'
+	| 'dblclick'
+	| 'auxclick';
+
+
+export type MouseButton = 0 | 1 | 3 | 4;
+
+/**
+ * A configurable mapping from a mouse gesture
+ * to a file item action.
+ */
+export interface FileItemGestureRule {
+	readonly type: FileItemGestureEventType;
+	readonly button: MouseButton;
+
+	readonly ctrlKey?: boolean;
+	readonly altKey?: boolean;
+	readonly shiftKey?: boolean;
+	readonly metaKey?: boolean;
+
+	readonly region?: FileItemRegion;
+	readonly action: FileItemAction;
+}
+
+/**
+ * The event properties required for gesture matching.
+ */
+export type MouseGestureEvent = Pick<
+	MouseEvent,
+	| 'type'
+	| 'button'
+	| 'ctrlKey'
+	| 'altKey'
+	| 'shiftKey'
+	| 'metaKey'
+>;
+
+/**
+ * Default mouse gesture configuration.
+ *
+ * Mouse button values:
+ * 0 = Left
+ * 1 = Middle
+ * 2 = Right (reserved)
+ * 3 = Back
+ * 4 = Forward
+ */
+export const DEFAULT_FILE_ITEM_SHORTCUTS:
+	readonly FileItemGestureRule[] = [
+		{
+			type: 'dblclick',
+			button: 0,
+			region: 'item',
+			action: 'openSource',
+		},
+		{
+			type: 'dblclick',
+			button: 0,
+			region: 'secondary',
+			action: 'editSummary',
+		},
+		{
+			type: 'click',
+			button: 0,
+			ctrlKey: true,
+			action: 'openContainingFolder',
+		},
+		{
+			type: 'click',
+			button: 0,
+			altKey: true,
+			action: 'openShadowNote',
+		},
+	];
+
+/**
+ * Resolve a mouse event into a file item action.
+ *
+ * Region-specific rules take precedence over
+ * rules that apply to the entire item.
+ *
+ * Returns null when no rule matches.
+ */
+export function resolveFileItemAction(
+	event: MouseGestureEvent,
+	region: FileItemRegion = 'item',
+	shortcuts: readonly FileItemGestureRule[] =
+		DEFAULT_FILE_ITEM_SHORTCUTS,
+): FileItemAction | null {
+
+	// Reserve right-click for context menus.
+	if (
+		event.button === 2 ||
+		event.type === 'contextmenu'
+	) {
+		return null;
+	}
+
+	// Match the event type, button and modifiers.
+	const matchingRules = shortcuts.filter(rule =>
+		rule.type === event.type &&
+		rule.button === event.button &&
+		(rule.ctrlKey ?? false) === event.ctrlKey &&
+		(rule.altKey ?? false) === event.altKey &&
+		(rule.shiftKey ?? false) === event.shiftKey &&
+		(rule.metaKey ?? false) === event.metaKey
+	);
+
+	// Prefer rules explicitly targeting this region.
+	const regionRule = matchingRules.find(
+		rule => rule.region === region
+	);
+
+	if (regionRule) {
+		return regionRule.action;
+	}
+
+	// Fall back to rules shared by all item regions.
+	const sharedRule = matchingRules.find(
+		rule => rule.region === undefined
+	);
+
+	return sharedRule?.action ?? null;
+}

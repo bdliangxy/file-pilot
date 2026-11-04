@@ -14,20 +14,7 @@ import {
 } from '../utils/ignore-rule-utils';
 import { pickPaths } from './native-file-dialog';
 import { importIgnoreRules, exportIgnoreRules } from './ignore-rules-file-dialog';
-
-function isPathInsideRoot(
-	rootPath: string,
-	selectedPath: string,
-): boolean {
-	const relativePath = relative(rootPath, selectedPath);
-
-	return (
-		relativePath !== '' &&
-		relativePath !== '..' &&
-		!relativePath.startsWith(`..${sep}`) &&
-		!isAbsolute(relativePath)
-	);
-}
+import { isPathInsideRoot } from '../utils/path-utils';
 
 
 export class IgnoreRulesSettingSection {

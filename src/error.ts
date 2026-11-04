@@ -5,7 +5,10 @@ export type FilePilotErrorCode =
 	| 'SCAN_ROOT_INVALID'
 	| 'SCAN_ROOT_NOT_FOUND'
 	| 'DATA_LOST'
-	| 'CLEAR_IN_PROGRESS';
+	| 'CLEAR_IN_PROGRESS'
+	| 'SHADOW_NOTE_NOT_FOUND'
+	| 'FILE_OPEN_FAILED'
+	| 'SOURCE_FILE_NOT_FOUND';
 
 export class FilePilotError extends Error {
 	constructor(

@@ -44,3 +44,21 @@ export function getFullName(relativePath: string): string {
 	return path.posix.basename(relativePath);
 }
 
+export function isPathInsideRoot(
+	rootPath: string,
+	targetPath: string,
+	allowRoot = false,
+): boolean {
+	const relativePath = path.relative(rootPath, targetPath);
+
+	if (relativePath === '') {
+		return allowRoot;
+	}
+
+	return (
+		relativePath !== '..' &&
+		!relativePath.startsWith('..' + path.sep) &&
+		!path.isAbsolute(relativePath)
+	);
+}
+
