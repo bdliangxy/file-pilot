@@ -1,6 +1,5 @@
 import { Notice, Setting, DropdownComponent, ButtonComponent, type TextAreaComponent } from 'obsidian';
 import { realpath } from 'node:fs/promises';
-import { isAbsolute, relative, sep } from 'node:path';
 import type { PluginStateService } from '../data/plugin-state-service';
 import { DEFAULT_IGNORE_PATTERNS } from '../data/setting-data';
 import { t } from '../i18n';

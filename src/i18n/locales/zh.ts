@@ -90,4 +90,11 @@ export const zh = {
 	filterStatusAll: '全部状态',
 	filterStatusLabel: '按状态筛选',
 	noMatchingFiles: '没有匹配的文件或文件夹',
+	// File action feedback
+	sourceFileNotFound: '文件或文件夹不存在',
+	shadowNoteNotFound: '找不到对应的 Shadow Note',
+	sourceFileOpenFailed: '打开文件失败',
+	folderOpenFailed: '打开文件夹失败',
+	shadowNoteOpenFailed: '打开影子笔记失败',
+	fileActionFailed: '文件操作失败',
 } satisfies Record<keyof typeof en, string>;

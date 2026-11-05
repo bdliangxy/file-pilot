@@ -1,4 +1,5 @@
 import { Plugin } from 'obsidian';
+import { shell } from 'electron';
 import { PluginStateService } from './data/plugin-state-service';
 import { logger } from './utils/logger';
 import { FilePilotSettingTab } from './ui/file-pilot-setting-tab';
@@ -7,18 +8,23 @@ import { FileScanner } from './core/file-scanner';
 import { ShadowNoteService } from './core/shadow-note-service';
 import { FilePilotView, VIEW_TYPE } from './ui/file-pilot-view';
 import { FileSyncService } from './core/file-sync';
+import { FileActionService } from './core/file-action-service';
 import type { SyncResult } from './core/file-sync';
 import { ShadowNoteWatcher } from './core/shadow-note-watcher';
 import { setShadowNotesHidden } from './ui/obsidian-ui';
 import { FilePilotError } from './error';
+import type { FileRecord } from './core/file-interface';
+import type { FileItemOpenAction } from './utils/file-item-gestures';
+import { openWindowsFolder } from './utils/native-path-opener';
 
 export default class FilePilotPlugin extends Plugin {
-	//he state service owns and persists all plugin data.
+	//the state service owns and persists all plugin data.
 	public readonly stateService = new PluginStateService({
 		loadData: () => this.loadData(),
 		saveData: (data) => this.saveData(data),
 	});
 	private fileSyncService!: FileSyncService;
+	private fileActionService!: FileActionService;
 	public shadowNoteService!: ShadowNoteService;
 	public shadowNoteWatcher!: ShadowNoteWatcher;
 
@@ -35,6 +41,17 @@ export default class FilePilotPlugin extends Plugin {
 			this.shadowNoteService,
 			(records) => this.stateService.addFileRecords(records),
 			() => this.stateService.getFileRecords(),
+		);
+		this.fileActionService = new FileActionService(
+			this.app,
+			() => this.stateService.getRootPath(),
+			(absolutePath, isDirectory) => {
+				if (isDirectory && process.platform === 'win32') {
+					return openWindowsFolder(absolutePath);
+				}
+
+				return shell.openPath(absolutePath);
+			},
 		);
 
 		// Initialize the Shadow Note watcher.
@@ -174,6 +191,16 @@ export default class FilePilotPlugin extends Plugin {
 		} finally {
 			this.stateService.endClearing();
 		}
+	}
+
+	async executeFileItemAction(
+		action: FileItemOpenAction,
+		record: FileRecord,
+	): Promise<void> {
+		await this.fileActionService.execute(
+			action,
+			record,
+		);
 	}
 
 }

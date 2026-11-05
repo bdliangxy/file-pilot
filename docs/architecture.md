@@ -10,6 +10,7 @@ flowchart TD
     IgnoreSection -->|"Read rules"| State
     Main -->|"Read and save data"| State
     Main -->|"Run sync"| Sync["FileSyncService"]
+    Main -->|"Execute file actions"| Action["FileActionService"]
     Sync -->|"Scan"| Scanner["FileScanner"]
     Sync -->|"Import"| Import["file-import"]
     Import -->|"Create notes"| Shadow["ShadowNoteService"]

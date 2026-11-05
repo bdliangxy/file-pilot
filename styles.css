@@ -247,9 +247,27 @@
 	border-radius: var(--radius-s);
 }
 
-/* Highlight the item on hover. */
+.file-pilot-file-item {
+	transition:
+		background-color 100ms ease,
+		transform 80ms ease;
+}
+
 .file-pilot-file-item:hover {
 	background: var(--background-modifier-hover);
+}
+
+.file-pilot-file-item:active {
+	background: color-mix(in srgb,
+			var(--interactive-accent) 12%,
+			var(--background-modifier-hover));
+	transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.file-pilot-file-item {
+		transition: none;
+	}
 }
 
 /* Center information area. */

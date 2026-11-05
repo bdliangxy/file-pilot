@@ -14,6 +14,7 @@ import { FilePilotError } from '../error';
  */
 export type OpenNativePath = (
 	absolutePath: string,
+	isDirectory: boolean,
 ) => Promise<string>;
 
 /**
@@ -120,7 +121,10 @@ export class FileActionService {
 		let errorMessage: string;
 
 		try {
-			errorMessage = await this.openNativePath(targetPath);
+			errorMessage = await this.openNativePath(
+				targetPath,
+				openParentFolder || record.kind === 'folder',
+			);
 		} catch (error) {
 			console.error(`Failed to open: ${targetPath}`, error);
 

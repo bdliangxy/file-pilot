@@ -80,7 +80,6 @@ export const en = {
 	fileStatusAvailable: 'Normal',
 	fileStatusMissing: 'Missing',
 	fileStatusIgnored: 'Ignored',
-
 	hideShadowNotesName: 'Hide Shadow Notes',
 	hideShadowNotesDesc:
 		'Hide the ShadowNotes folder in the native file explorer without affecting the notes themselves.',
@@ -92,4 +91,11 @@ export const en = {
 	filterStatusAll: 'All statuses',
 	filterStatusLabel: 'Filter by status',
 	noMatchingFiles: 'No matching files or folders',
+	// File action feedback
+	sourceFileNotFound: 'File or folder not found',
+	shadowNoteNotFound: 'Shadow Note not found',
+	sourceFileOpenFailed: 'Failed to open file',
+	folderOpenFailed: 'Failed to open folder',
+	shadowNoteOpenFailed: 'Failed to open Shadow Note',
+	fileActionFailed: 'File operation failed',
 } as const;
