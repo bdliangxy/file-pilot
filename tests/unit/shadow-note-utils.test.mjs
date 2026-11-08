@@ -30,90 +30,123 @@ test('generates a UUID-suffixed name when requested', () => {
 });
 
 test('extracts only the first paragraph and joins its lines', () => {
-	const { content, headings } = shadowNoteFixtures.standard;
+	const { content } = shadowNoteFixtures.standard;
 
 	assert.equal(
-		extractFirstParagraphFromHeading(content, headings, 'File Summary'),
+		extractFirstParagraphFromHeading(content, 'File Summary'),
 		'This is a project report. It contains budget information.',
 	);
 });
 
 test('returns null when the requested heading is absent', () => {
-	const { content, headings } = shadowNoteFixtures.missing;
+	const { content } = shadowNoteFixtures.missing;
 
 	assert.equal(
-		extractFirstParagraphFromHeading(content, headings, 'File Summary'),
+		extractFirstParagraphFromHeading(content, 'File Summary'),
 		null,
 	);
 });
 
 test('returns null when the target section is empty', () => {
-	const { content, headings } = shadowNoteFixtures.empty;
+	const { content } = shadowNoteFixtures.empty;
 
 	assert.equal(
-		extractFirstParagraphFromHeading(content, headings, 'File Summary'),
+		extractFirstParagraphFromHeading(content, 'File Summary'),
 		null,
 	);
 });
 
 test('does not take text from a following subheading', () => {
-	const { content, headings } = shadowNoteFixtures.subheading;
+	const { content } = shadowNoteFixtures.subheading;
 
 	assert.equal(
-		extractFirstParagraphFromHeading(content, headings, 'File Summary'),
+		extractFirstParagraphFromHeading(content, 'File Summary'),
 		null,
 	);
 });
 
 test('supports a custom heading name and level', () => {
-	const { content, headings } = shadowNoteFixtures.customLevel;
+	const { content } = shadowNoteFixtures.customLevel;
 
 	assert.equal(
-		extractFirstParagraphFromHeading(content, headings, 'Description', 3),
+		extractFirstParagraphFromHeading(content, 'Description', 3),
 		'This summary uses a custom heading.',
 	);
 	assert.equal(
-		extractFirstParagraphFromHeading(content, headings, 'Description'),
+		extractFirstParagraphFromHeading(content, 'Description'),
 		null,
 	);
 });
 
-test('uses metadata headings rather than heading-like text in code fences', () => {
-	const { content, headings } = shadowNoteFixtures.codeFence;
+test('does not treat heading-like text inside a code fence as a Markdown heading', () => {
+	const { content } = shadowNoteFixtures.codeFence;
 
 	assert.equal(
-		extractFirstParagraphFromHeading(content, headings, 'File Summary'),
+		extractFirstParagraphFromHeading(content, 'File Summary'),
 		'This is the actual summary.',
 	);
 });
 
 test('supports CRLF line endings', () => {
-	const { content, headings } = shadowNoteFixtures.crlf;
+	const { content } = shadowNoteFixtures.crlf;
 
 	assert.equal(
-		extractFirstParagraphFromHeading(content, headings, 'File Summary'),
+		extractFirstParagraphFromHeading(content, 'File Summary'),
 		'First line. Second line.',
 	);
 });
 
-test('rejects source positions outside the Markdown document', () => {
-	const { content, headings } = shadowNoteFixtures.standard;
-	const target = headings.find(h => h.heading === 'File Summary');
-	assert.ok(target);
-
-	const invalidHeadings = [{
-		...target,
-		position: {
-			...target.position,
-			end: {
-				...target.position.end,
-				offset: content.length + 1,
-			},
-		},
-	}];
+test('skips fenced code and extracts the first top-level paragraph', () => {
+	const content = [
+		'## File Summary',
+		'',
+		'```cpp',
+		'int main() { return 0; }',
+		'```',
+		'',
+		'This **C++** file contains `main()`.',
+		'',
+		'Another paragraph.',
+		'',
+		'## Notes',
+		'',
+		'Other details.',
+	].join('\n');
 
 	assert.equal(
-		extractFirstParagraphFromHeading(content, invalidHeadings, 'File Summary'),
+		extractFirstParagraphFromHeading(content, 'File Summary'),
+		'This C++ file contains main().',
+	);
+});
+
+test('returns null if File Summary contains only fenced code', () => {
+	const content = '## File Summary\n\n```ts\nconst x = 1;\n```\n';
+	assert.equal(extractFirstParagraphFromHeading(content, 'File Summary'), null);
+});
+
+test('skips lists and blockquotes before a top-level paragraph', () => {
+	const content = '## File Summary\n\n- One\n- Two\n\n> Quoted text\n\nActual summary.\n';
+	assert.equal(
+		extractFirstParagraphFromHeading(content, 'File Summary'),
+		'Actual summary.',
+	);
+});
+
+test('stops at the next heading when preceding content is not a paragraph', () => {
+	const content = [
+		'## File Summary',
+		'',
+		'```js',
+		'const example = true;',
+		'```',
+		'',
+		'## Notes',
+		'',
+		'This belongs to Notes.',
+	].join('\n');
+
+	assert.equal(
+		extractFirstParagraphFromHeading(content, 'File Summary'),
 		null,
 	);
 });

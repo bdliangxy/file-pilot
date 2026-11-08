@@ -264,6 +264,12 @@
 	transform: translateY(1px);
 }
 
+/* Do not depress the item when interacting with secondary text. */
+.file-pilot-file-item:active:has(.file-pilot-file-secondary-wrap:hover) {
+	background: var(--background-modifier-hover);
+	transform: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.file-pilot-file-item {
 		transition: none;
@@ -297,12 +303,123 @@
 
 /* Shared secondary text style. */
 .file-pilot-file-secondary {
+	--no-tooltip: true;
+
 	min-width: 0;
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+/* Interactive region for File Summary and its edit icon. */
+.file-pilot-file-secondary-wrap {
+	position: relative;
+	min-width: 0;
+	padding: 3px 6px;
+	margin: -3px -6px;
+	border-radius: var(--radius-s);
+
+	cursor: default;
+	transition: background-color 100ms ease;
+}
+
+/* Highlight the editable region without showing a tooltip. */
+.file-pilot-file-secondary-wrap:hover:not(:has(.file-pilot-file-editing)) {
+	background: color-mix(in srgb,
+			var(--interactive-accent) 16%,
+			var(--background-modifier-hover));
+}
+
+/* Reserve space for the icon without moving the text on hover. */
+.file-pilot-file-secondary-wrap:not(:has(.file-pilot-file-editing)) .file-pilot-file-secondary {
+	padding-right: 20px;
+}
+
+/* Editable File Summary button. */
+.file-pilot-file-secondary-wrap .file-pilot-summary-edit-button {
+	--no-tooltip: true;
+
+	position: absolute;
+	right: 4px;
+	top: 50%;
+
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	width: 18px;
+	height: 18px;
+	min-width: 0;
+	min-height: 0;
+	padding: 0;
+
+	border: none;
+	border-radius: var(--radius-s);
+	background: transparent;
+	box-shadow: none;
+
+	color: var(--text-muted);
+	opacity: 0;
+	pointer-events: none;
+	cursor: pointer;
+
+	transform: translateY(-50%);
+	transition:
+		opacity 100ms ease,
+		color 100ms ease;
+}
+
+/* Keep the pencil compact. */
+.file-pilot-summary-edit-button svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* Reveal the button when hovering over the secondary region. */
+.file-pilot-file-secondary-wrap:hover:not(:has(.file-pilot-file-editing)) .file-pilot-summary-edit-button {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+/* Also reveal the button when focused from the keyboard. */
+.file-pilot-summary-edit-button:focus-visible {
+	opacity: 1;
+	pointer-events: auto;
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 1px;
+}
+
+/* Highlight the pencil itself on hover. */
+.file-pilot-file-secondary-wrap .file-pilot-summary-edit-button:hover {
+	color: var(--text-normal);
+	background: transparent;
+	box-shadow: none;
+}
+
+/* Hide the button while the inline editor is active. */
+.file-pilot-file-secondary-wrap:has(.file-pilot-file-editing) .file-pilot-summary-edit-button {
+	display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.file-pilot-summary-edit-button {
+		transition: none;
+	}
+}
+
+/* The input uses its own text cursor during editing. */
+.file-pilot-file-secondary-wrap:has(.file-pilot-file-editing) {
+	cursor: text;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.file-pilot-file-secondary-wrap,
+	.file-pilot-summary-edit-icon {
+		transition: none;
+	}
 }
 
 /* Preserve the trailing part of long absolute paths. */
@@ -469,4 +586,23 @@ body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explor
 /* Remove the filter container background. */
 .file-pilot-filter-section .setting-item {
 	background-color: transparent !important;
+}
+
+/* Inline File Summary editing container. */
+.file-pilot-file-editing {
+	direction: ltr;
+	text-align: left;
+	overflow: visible;
+}
+
+/* Single-line File Summary editor. */
+.file-pilot-summary-editor {
+	display: block;
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+
+	direction: ltr;
+	text-align: left;
+	font: inherit;
 }

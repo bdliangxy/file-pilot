@@ -537,3 +537,90 @@ test('search matches managed folders and does not change their metadata', async 
     assert.deepEqual(visibleNames(ui), []);
     await ui.view.onClose();
 });
+
+
+test('inline summary editor creates a summary with Enter and saves only once on blur', async () => {
+    let savedSummary = null;
+    const writes = [];
+    const ui = setup(async () => savedSummary);
+    ui.view.filePilot.shadowNoteService.updateFileSummary = async (_record, summary) => {
+        writes.push(summary);
+        savedSummary = summary;
+    };
+
+    await ui.view.onOpen();
+    await flush();
+
+    const item = ui.view.mapNotePathItemState.get(ui.record.shadowNotePath);
+    await ui.view.startSummaryEdit(item);
+
+    const input = item.inputEl;
+    assert.ok(input);
+    assert.equal(input.value, '');
+    assert.equal(input.focused, true);
+
+    input.value = 'Created summary';
+    input.dispatch('input');
+    input.dispatch('keydown', { key: 'Enter', isComposing: false });
+    input.dispatch('blur');
+    await flush();
+
+    assert.deepEqual(writes, ['Created summary']);
+    assert.equal(item.isEditing, false);
+    assert.equal(ui.find('file-pilot-file-secondary').text, 'Created summary');
+    await ui.view.onClose();
+});
+
+test('inline summary editor saves on blur and skips writes when unchanged', async () => {
+    let savedSummary = 'Existing summary';
+    const writes = [];
+    const ui = setup(async () => savedSummary);
+    ui.view.filePilot.shadowNoteService.updateFileSummary = async (_record, summary) => {
+        writes.push(summary);
+        savedSummary = summary;
+    };
+
+    await ui.view.onOpen();
+    await flush();
+    const item = ui.view.mapNotePathItemState.get(ui.record.shadowNotePath);
+
+    await ui.view.startSummaryEdit(item);
+    assert.equal(item.inputEl.value, 'Existing summary');
+    item.inputEl.dispatch('blur');
+    await flush();
+    assert.deepEqual(writes, []);
+
+    await ui.view.startSummaryEdit(item);
+    item.inputEl.value = 'Updated summary';
+    item.inputEl.dispatch('input');
+    item.inputEl.dispatch('blur');
+    await flush();
+    assert.deepEqual(writes, ['Updated summary']);
+    assert.equal(ui.find('file-pilot-file-secondary').text, 'Updated summary');
+    await ui.view.onClose();
+});
+
+test('Escape cancels summary changes without saving on subsequent blur', async () => {
+    const writes = [];
+    const ui = setup(async () => 'Original summary');
+    ui.view.filePilot.shadowNoteService.updateFileSummary = async (_record, summary) => {
+        writes.push(summary);
+    };
+
+    await ui.view.onOpen();
+    await flush();
+    const item = ui.view.mapNotePathItemState.get(ui.record.shadowNotePath);
+    await ui.view.startSummaryEdit(item);
+    const input = item.inputEl;
+
+    input.value = 'Discarded draft';
+    input.dispatch('input');
+    input.dispatch('keydown', { key: 'Escape', isComposing: false });
+    input.dispatch('blur');
+    await flush();
+
+    assert.deepEqual(writes, []);
+    assert.equal(item.isEditing, false);
+    assert.equal(ui.find('file-pilot-file-secondary').text, 'Original summary');
+    await ui.view.onClose();
+});

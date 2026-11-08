@@ -68,9 +68,15 @@ export class FakeElement {
         this.attributes[name] = value;
     }
 
-    dispatch(event) {
+    dispatch(event, properties = {}) {
+        const syntheticEvent = {
+            target: this,
+            preventDefault() {},
+            stopPropagation() {},
+            ...properties,
+        };
         for (const callback of this.listeners.get(event) ?? []) {
-            callback({ target: this });
+            callback(syntheticEvent);
         }
     }
 
@@ -84,6 +90,9 @@ export class FakeElement {
         for (const child of this.children) child.connected = false;
         this.children = [];
     }
+
+    focus() { this.focused = true; }
+    select() { this.selected = true; }
 
     addClass(cls) { this.classes.add(cls); }
     removeClass(cls) { this.classes.delete(cls); }

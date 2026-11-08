@@ -49,6 +49,12 @@ interface FileItemState {
 	 * refresh is allowed to modify the UI
 	 */
 	summaryUpdateVersion: number;
+
+	isEditing: boolean;
+	isSaving: boolean;
+	originalSummary: string;
+	draft: string;
+	inputEl: HTMLInputElement | null;
 }
 
 export class FilePilotView extends ItemView {
@@ -465,22 +471,61 @@ export class FilePilotView extends ItemView {
 			text: getFullName(record.path),
 		});
 
-		const secondaryEl = infoEl.createDiv({
+		// Create a shared interactive region for the text and edit icon.
+		const secondaryWrapEl = infoEl.createDiv({
+			cls: 'file-pilot-file-secondary-wrap',
+		});
+
+		const secondaryEl = secondaryWrapEl.createDiv({
 			cls: 'file-pilot-file-secondary file-pilot-file-path',
 			text: absolutePath,
 		});
+
+		// Create an accessible button for editing File Summary.
+		const editButtonEl = secondaryWrapEl.createEl('button', {
+			cls: 'file-pilot-summary-edit-button',
+			attr: {
+				type: 'button',
+				'aria-label': t('fileSummaryEdit'),
+				title: t('fileSummaryEdit'),
+			},
+		});
+
+		setIcon(editButtonEl, 'pencil');
 
 		const fileItemState: FileItemState = {
 			record,
 			secondaryEl,
 			absolutePath,
 			summaryUpdateVersion: 0,
+			isEditing: false,
+			isSaving: false,
+			originalSummary: '',
+			draft: '',
+			inputEl: null,
 		};
 
 		this.mapNotePathItemState.set(
 			record.shadowNotePath,
 			fileItemState,
 		);
+
+		// Single-click the pencil to edit File Summary.
+		editButtonEl.addEventListener('click', event => {
+			// Preserve existing Ctrl/Alt item shortcuts.
+			if (event.ctrlKey || event.altKey) {
+				return;
+			}
+
+			event.stopPropagation();
+
+			void this.startSummaryEdit(fileItemState);
+		});
+
+		// Prevent a double-click on the button from reaching the item.
+		editButtonEl.addEventListener('dblclick', event => {
+			event.stopPropagation();
+		});
 
 		void this.updateFileSummary(fileItemState);
 
@@ -515,9 +560,10 @@ export class FilePilotView extends ItemView {
 				return;
 			}
 
-			const region: FileItemRegion = secondaryEl.contains(event.target as Node)
-				? 'secondary'
-				: 'item';
+			const region: FileItemRegion =
+				secondaryWrapEl.contains(event.target as Node)
+					? 'secondary'
+					: 'item';
 
 			const action = resolveFileItemAction(event, region);
 
@@ -529,7 +575,7 @@ export class FilePilotView extends ItemView {
 			event.stopPropagation();
 
 			if (action === 'editSummary') {
-				// Inline editing will be implemented in the next step.
+				void this.startSummaryEdit(fileItemState);
 				return;
 			}
 
@@ -547,6 +593,9 @@ export class FilePilotView extends ItemView {
 	private async updateFileSummary(
 		item: FileItemState,
 	): Promise<void> {
+		if (item.isEditing) {
+			return;
+		}
 		const summaryUpdateVersion = ++item.summaryUpdateVersion;
 
 		try {
@@ -556,6 +605,7 @@ export class FilePilotView extends ItemView {
 
 			// Ignore outdated asynchronous results.
 			if (
+				item.isEditing ||
 				summaryUpdateVersion !== item.summaryUpdateVersion ||
 				!item.secondaryEl.isConnected ||
 				this.mapNotePathItemState.get(
@@ -613,5 +663,205 @@ export class FilePilotView extends ItemView {
 
 		this.refreshFileList();
 	}
+
+	private async startSummaryEdit(
+		item: FileItemState,
+	): Promise<void> {
+		if (item.isEditing) {
+			return;
+		}
+
+		// Enter editing mode before starting the asynchronous read.
+		item.isEditing = true;
+
+		// Invalidate any pending summary display updates.
+		++item.summaryUpdateVersion;
+
+		try {
+			const summary =
+				await this.filePilot.shadowNoteService
+					.getFileSummary(item.record);
+
+			// The item may have been removed while awaiting the read.
+			if (
+				!item.isEditing ||
+				!item.secondaryEl.isConnected ||
+				this.mapNotePathItemState.get(
+					item.record.shadowNotePath,
+				) !== item
+			) {
+				return;
+			}
+
+			item.originalSummary = summary ?? '';
+			item.draft = item.originalSummary;
+
+			const secondaryEl = item.secondaryEl;
+
+			secondaryEl.empty();
+			secondaryEl.removeClass(
+				'file-pilot-file-path',
+				'file-pilot-file-summary',
+			);
+			secondaryEl.addClass('file-pilot-file-editing');
+
+			const inputEl = secondaryEl.createEl('input', {
+				cls: 'file-pilot-summary-editor',
+				attr: {
+					type: 'text',
+					placeholder: t('fileSummaryPlaceholder'),
+					'aria-label': t('fileSummaryPlaceholder'),
+				},
+			});
+
+			item.inputEl = inputEl;
+			inputEl.value = item.draft;
+
+			inputEl.addEventListener('input', () => {
+				item.draft = inputEl.value;
+			});
+
+			// Keep text selection and modifier-clicks inside the editor.
+			inputEl.addEventListener('click', event => {
+				event.stopPropagation();
+			});
+
+			inputEl.addEventListener('dblclick', event => {
+				event.stopPropagation();
+			});
+
+			inputEl.addEventListener('keydown', event => {
+				// Do not treat IME confirmation as an Enter submission.
+				if (event.isComposing) {
+					return;
+				}
+
+				if (event.key === 'Enter') {
+					event.preventDefault();
+					event.stopPropagation();
+
+					void this.commitSummaryEdit(item);
+					return;
+				}
+
+				if (event.key === 'Escape') {
+					event.preventDefault();
+					event.stopPropagation();
+
+					this.cancelSummaryEdit(item);
+				}
+			});
+
+			inputEl.addEventListener('blur', () => {
+				void this.commitSummaryEdit(item);
+			});
+
+			inputEl.focus();
+			inputEl.select();
+		} catch (error) {
+			item.isEditing = false;
+
+			console.error(
+				'Failed to start File Summary editing:',
+				item.record.shadowNotePath,
+				error,
+			);
+
+			new Notice(t('fileActionFailed'));
+		}
+	}
+
+
+	private cancelSummaryEdit(item: FileItemState): void {
+		if (!item.isEditing || item.isSaving) {
+			return;
+		}
+
+		this.finishSummaryEdit(
+			item,
+			item.originalSummary,
+		);
+	}
+
+	private finishSummaryEdit(
+		item: FileItemState,
+		summary: string,
+	): void {
+		item.isEditing = false;
+		item.isSaving = false;
+		item.inputEl = null;
+		item.draft = '';
+
+		const secondaryEl = item.secondaryEl;
+
+		secondaryEl.removeClass('file-pilot-file-editing');
+
+		if (summary) {
+			secondaryEl.removeClass('file-pilot-file-path');
+			secondaryEl.addClass('file-pilot-file-summary');
+			secondaryEl.setText(summary);
+		} else {
+			secondaryEl.removeClass('file-pilot-file-summary');
+			secondaryEl.addClass('file-pilot-file-path');
+			secondaryEl.setText(item.absolutePath);
+		}
+
+		// Reconcile the display with the latest Shadow Note content.
+		void this.updateFileSummary(item);
+	}
+
+
+	private async commitSummaryEdit(
+		item: FileItemState,
+	): Promise<void> {
+		if (!item.isEditing || item.isSaving) {
+			return;
+		}
+
+		const inputEl = item.inputEl;
+
+		if (!inputEl) {
+			return;
+		}
+
+		const newSummary = inputEl.value.trim();
+		item.draft = newSummary;
+
+		// Avoid unnecessary writes when nothing has changed.
+		if (newSummary === item.originalSummary.trim()) {
+			this.finishSummaryEdit(
+				item,
+				item.originalSummary,
+			);
+			return;
+		}
+
+		// Lock the editor while the write is in progress.
+		item.isSaving = true;
+		inputEl.readOnly = true;
+
+		try {
+			await this.filePilot.shadowNoteService
+				.updateFileSummary(
+					item.record,
+					newSummary,
+				);
+
+			this.finishSummaryEdit(item, newSummary);
+
+		} catch (error) {
+			item.isSaving = false;
+			inputEl.readOnly = false;
+
+			console.error(
+				'Failed to save File Summary:',
+				item.record.shadowNotePath,
+				error,
+			);
+
+			new Notice(t('fileActionFailed'));
+		}
+	}
+
 
 }

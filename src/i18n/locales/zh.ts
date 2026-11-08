@@ -97,4 +97,7 @@ export const zh = {
 	folderOpenFailed: '打开文件夹失败',
 	shadowNoteOpenFailed: '打开影子笔记失败',
 	fileActionFailed: '文件操作失败',
+	//about file summary
+	fileSummaryPlaceholder: '添加文件简介…',
+	fileSummaryEdit: '编辑文件简介',
 } satisfies Record<keyof typeof en, string>;

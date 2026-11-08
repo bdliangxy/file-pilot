@@ -1,5 +1,4 @@
 import { getFullName } from './path-utils';
-import type { HeadingCache } from 'obsidian';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkFrontmatter from 'remark-frontmatter';
@@ -33,46 +32,51 @@ export function generateShadowNoteName(
 
 export function extractFirstParagraphFromHeading(
 	content: string,
-	headings: readonly HeadingCache[],
 	headingName: string,
 	headingLevel = 2,
 ): string | null {
+	// Parse the Markdown document into an AST.
+	const nodes = markdownParser.parse(content).children;
+
 	// Find the target heading.
-	const target = headings.find(
-		h =>
-			h.level === headingLevel &&
-			h.heading === headingName
+	const targetIndex = nodes.findIndex(
+		node =>
+			node.type === 'heading' &&
+			node.depth === headingLevel &&
+			toString(node) === headingName
 	);
 
-	if (!target) {
+	if (targetIndex === -1) {
 		return null;
 	}
 
-	// Find the next heading after the target.
-	const next = headings.find(
-		h =>
-			h.position.start.offset >
-			target.position.start.offset
-	);
+	// Search for the first paragraph within the section.
+	for (let i = targetIndex + 1; i < nodes.length; i++) {
+		const node = nodes[i];
+		if (!node) {
+			continue;
+		}
+		// Stop at the next heading.
+		if (node.type === 'heading') {
+			break;
+		}
 
-	const start = target.position.end.offset;
-	const end = next?.position.start.offset ?? content.length;
+		// Skip code blocks, lists, blockquotes, and other nodes.
+		if (node.type !== 'paragraph') {
+			continue;
+		}
 
-	// Reject invalid source ranges.
-	if (start > end || end > content.length) {
-		return null;
+		// Extract plain text from the paragraph.
+		const paragraph = toString(node)
+			.replace(/\r?\n/g, ' ')
+			.trim();
+
+		if (paragraph) {
+			return paragraph;
+		}
 	}
 
-	// Extract the text between headings.
-	const section = content.slice(start, end).trim();
-
-	// Extract the first non-empty paragraph.
-	const paragraph = section
-		.split(/\r?\n[ \t]*\r?\n/, 1)[0]
-		?.replace(/\r?\n/g, ' ')
-		.trim();
-
-	return paragraph || null;
+	return null;
 }
 
 

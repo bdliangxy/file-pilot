@@ -98,4 +98,7 @@ export const en = {
 	folderOpenFailed: 'Failed to open folder',
 	shadowNoteOpenFailed: 'Failed to open Shadow Note',
 	fileActionFailed: 'File operation failed',
+	//about file summary
+	fileSummaryPlaceholder: 'Add file summary...',
+	fileSummaryEdit: 'Edit file summary',
 } as const;
