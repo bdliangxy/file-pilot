@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { makeFileRecord } from '../factories/file-record.mjs';
 import { Notice } from '../fakes/obsidian-settings.mjs';
+import { getLanguage, setLanguage } from '../fakes/obsidian.mjs';
 
 const jiti = createJiti(import.meta.url, {
     alias: {
@@ -132,6 +133,72 @@ test('shows missing and ambiguous references without attaching actions', (t) => 
     assert.ok(elements.every(el => el.classList.contains('file-pilot-reference-unresolved')));
     for (const el of elements) mouse(ctx, el, 'dblclick');
     assert.deepEqual(ctx.actions, []);
+});
+
+test('localizes missing and ambiguous references in Chinese', (t) => {
+    const previousLanguage = getLanguage();
+    setLanguage('zh');
+    t.after(() => setLanguage(previousLanguage));
+
+    const first = makeFileRecord(ID_A);
+    const duplicate = makeFileRecord(ID_A, { path: 'docs/duplicate.pdf' });
+    const ctx = setup(t, [first, duplicate]);
+    paragraph(ctx, shortRef(ID_A) + ' and ' + fullRef(ID_B));
+
+    ctx.renderer.render(ctx.document.body);
+
+    const elements = references(ctx);
+    assert.deepEqual(elements.map(el => el.textContent), [
+        '文件引用存在歧义',
+        '未找到文件引用',
+    ]);
+    assert.deepEqual(elements.map(el => el.title), [
+        '多个受管理文件具有相同的引用短 Key。',
+        '没有与此引用匹配的受管理文件。',
+    ]);
+    assert.ok(elements.every(el =>
+        el.classList.contains('file-pilot-reference-unresolved')));
+    for (const element of elements) {
+        mouse(ctx, element, 'dblclick');
+    }
+    assert.deepEqual(ctx.actions, []);
+});
+
+test('localizes missing and ambiguous reference tooltips in English', (t) => {
+    const previousLanguage = getLanguage();
+    setLanguage('en');
+    t.after(() => setLanguage(previousLanguage));
+
+    const first = makeFileRecord(ID_A);
+    const duplicate = makeFileRecord(ID_A, { path: 'docs/duplicate.pdf' });
+    const ctx = setup(t, [first, duplicate]);
+    paragraph(ctx, shortRef(ID_A) + ' and ' + fullRef(ID_B));
+
+    ctx.renderer.render(ctx.document.body);
+
+    const elements = references(ctx);
+    assert.deepEqual(elements.map(el => el.textContent), [
+        'Ambiguous file reference',
+        'File reference not found',
+    ]);
+    assert.deepEqual(elements.map(el => el.title), [
+        'Multiple managed files share this reference key.',
+        'No managed file matches this reference.',
+    ]);
+});
+
+test('falls back to English for unresolved references in unsupported locales', (t) => {
+    const previousLanguage = getLanguage();
+    setLanguage('fr');
+    t.after(() => setLanguage(previousLanguage));
+
+    const ctx = setup(t, []);
+    paragraph(ctx, fullRef(ID_A));
+
+    ctx.renderer.render(ctx.document.body);
+
+    assert.equal(references(ctx)[0].textContent, 'File reference not found');
+    assert.equal(references(ctx)[0].title, 'No managed file matches this reference.');
 });
 
 test('reuses double-click, Ctrl-click and Alt-click without intercepting plain click', async (t) => {

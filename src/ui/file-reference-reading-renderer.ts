@@ -7,6 +7,7 @@ import { resolveFileItemAction } from "../utils/file-item-gestures";
 import { parseFileReference } from "../utils/file-reference-utils";
 import { logger } from "../utils/logger";
 import { notifyFileActionError } from "./file-action-error-notifier";
+import { t } from "../i18n";
 
 
 // Locate candidate references without validating their content.
@@ -104,15 +105,13 @@ export class FileReferenceReadingRenderer {
 		if (result.kind !== "found") {
 			switch (result.kind) {
 				case "missing":
-					element.textContent = "File reference not found";
-					element.title =
-						"No managed file matches this reference.";
+					element.textContent = t("fileReferenceNotFound");
+					element.title = t("fileReferenceNotFoundHint");
 					break;
 
 				case "ambiguous":
-					element.textContent = "Ambiguous file reference";
-					element.title =
-						"Multiple managed files share this reference key.";
+					element.textContent = t("fileReferenceAmbiguous");
+					element.title = t("fileReferenceAmbiguousHint");
 					break;
 			}
 
