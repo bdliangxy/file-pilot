@@ -11,6 +11,9 @@ flowchart TD
     Main -->|"Read and save data"| State
     Main -->|"Run sync"| Sync["FileSyncService"]
     Main -->|"Execute file actions"| Action["FileActionService"]
+    Main -->|"Rebuild reference index"| Reference["FileReferenceService"]
+    Main -->|"Render references"| ReadingRenderer["FileReferenceReadingRenderer"]
+    ReadingRenderer -->|"Resolve references"| Reference
     Sync -->|"Scan"| Scanner["FileScanner"]
     Sync -->|"Import"| Import["file-import"]
     Import -->|"Create notes"| Shadow["ShadowNoteService"]

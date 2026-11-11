@@ -606,3 +606,59 @@ body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explor
 	text-align: left;
 	font: inherit;
 }
+
+/* File references in Markdown Reading Mode. */
+.file-pilot-reference {
+	color: var(--text-accent);
+	font-weight: 500;
+	text-decoration: underline;
+	text-decoration-color: var(--text-accent);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 3px;
+
+	border-radius: var(--radius-s);
+	padding: 1px 3px;
+	margin: 0 -3px;
+
+	overflow-wrap: anywhere;
+	cursor: pointer;
+
+	transition:
+		color 120ms ease,
+		background-color 120ms ease;
+}
+
+/* Highlight interactive references on hover. */
+.file-pilot-reference:not(.file-pilot-reference-unresolved):hover {
+	color: var(--text-accent-hover);
+	background-color: var(--background-modifier-hover);
+}
+
+/* Provide feedback when a reference is pressed. */
+.file-pilot-reference:not(.file-pilot-reference-unresolved):active {
+	background-color: var(--background-modifier-active-hover);
+}
+
+/* Missing or ambiguous file references. */
+.file-pilot-reference-unresolved {
+	color: var(--text-error);
+	font-weight: 400;
+
+	text-decoration: underline dashed;
+	text-decoration-color: var(--text-error);
+	text-underline-offset: 3px;
+
+	cursor: help;
+}
+
+/* Disable hover effects for unresolved references. */
+.file-pilot-reference-unresolved:hover {
+	background-color: transparent;
+}
+
+/* Respect reduced-motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+	.file-pilot-reference {
+		transition: none;
+	}
+}

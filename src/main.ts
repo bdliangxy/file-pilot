@@ -16,6 +16,8 @@ import { FilePilotError } from './error';
 import type { FileRecord } from './core/file-interface';
 import type { FileItemOpenAction } from './utils/file-item-gestures';
 import { openWindowsFolder } from './utils/native-path-opener';
+import { FileReferenceService } from './core/file-reference-service';
+import { FileReferenceReadingRenderer } from './ui/file-reference-reading-renderer';
 
 export default class FilePilotPlugin extends Plugin {
 	//the state service owns and persists all plugin data.
@@ -27,11 +29,14 @@ export default class FilePilotPlugin extends Plugin {
 	private fileActionService!: FileActionService;
 	public shadowNoteService!: ShadowNoteService;
 	public shadowNoteWatcher!: ShadowNoteWatcher;
+	public readonly fileReferenceService = new FileReferenceService();
 
 	async onload(): Promise<void> {
 
 		// Load persisted plugin data.
 		await this.stateService.load();
+		// Initialize the file reference index.
+		this.rebuildFileReferenceIndex();
 		// Apply ShadowNotes visibility settings.
 		this.applyShadowNotesVisibility();
 		this.shadowNoteService = new ShadowNoteService(this.app);
@@ -59,7 +64,10 @@ export default class FilePilotPlugin extends Plugin {
 			this.app.vault,
 			this.app.metadataCache,
 			this.stateService,
-			() => this.refreshViewFileList(),
+			() => {
+				this.refreshViewFileList()
+				this.rebuildFileReferenceIndex();
+			},
 		);
 
 		this.addChild(this.shadowNoteWatcher);
@@ -74,6 +82,16 @@ export default class FilePilotPlugin extends Plugin {
 			VIEW_TYPE,
 			(leaf) => new FilePilotView(leaf, this),
 		);
+
+		// Register file references in Markdown Reading Mode.
+		const referenceRenderer = new FileReferenceReadingRenderer(
+			this.fileReferenceService,
+			(action, record) => this.executeFileItemAction(action, record),
+		);
+
+		this.registerMarkdownPostProcessor((element) => {
+			referenceRenderer.render(element);
+		});
 
 		// Add the ribbon icon.
 		this.addRibbonIcon(
@@ -121,9 +139,16 @@ export default class FilePilotPlugin extends Plugin {
 			);
 		}
 
-		return this.fileSyncService.syncFiles(
+		const result = await this.fileSyncService.syncFiles(
 			this.stateService.getFileScope(),
 		);
+
+		if (result.importedCount > 0) {
+			this.rebuildFileReferenceIndex();
+		}
+
+		return result;
+
 	}
 
 	refreshViewRootPath(): void {
@@ -156,6 +181,13 @@ export default class FilePilotPlugin extends Plugin {
 		}
 	}
 
+	private rebuildFileReferenceIndex(): void {
+		const records = this.stateService.getFileRecords();
+
+		this.fileReferenceService.rebuildReferenceIndex(records);
+	}
+
+
 	applyShadowNotesVisibility(): void {
 		setShadowNotesHidden(
 			this.stateService.getHideShadowNotesFlag()
@@ -184,6 +216,9 @@ export default class FilePilotPlugin extends Plugin {
 
 			// Restore the default plugin data.
 			await this.stateService.resetAllData();
+
+			// Clear the reference index.
+			this.rebuildFileReferenceIndex();
 
 			this.refreshViewRootPath();
 			this.refreshViewFileList();
