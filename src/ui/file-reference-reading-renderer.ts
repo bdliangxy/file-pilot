@@ -8,8 +8,9 @@ import { parseFileReference } from "../utils/file-reference-utils";
 import { logger } from "../utils/logger";
 import { notifyFileActionError } from "./file-action-error-notifier";
 import { t } from "../i18n";
-import { displayTooltip } from "obsidian";
+import type { App, HoverParent } from "obsidian";
 
+export const FILE_REFERENCE_HOVER_SOURCE = "file-pilot";
 
 // Locate candidate references without validating their content.
 const REFERENCE_PATTERN =
@@ -23,6 +24,7 @@ type ExecuteAction = (
 export class FileReferenceReadingRenderer {
 	private readonly loggedUnresolvedReferences = new Set<string>();
 	constructor(
+		private readonly app: App,
 		private readonly references: FileReferenceService,
 		private readonly executeAction: ExecuteAction,
 	) { }
@@ -141,6 +143,39 @@ export class FileReferenceReadingRenderer {
 		element.textContent = result.record.status === "missing"
 			? `${fileName} (${t("fileStatusMissing")})`
 			: fileName;
+
+		// Keep a stable hover parent for this reference element.
+		const hoverParent: HoverParent = {
+			hoverPopover: null,
+		};
+
+		// Preview the associated Shadow Note on hover.
+		element.addEventListener("mouseover", (event: MouseEvent) => {
+			// Resolve again to avoid using stale records.
+			const current = this.references.resolveFileReference(raw);
+
+			if (current.kind !== "found") {
+				return;
+			}
+
+			const note = this.app.vault.getFileByPath(
+				current.record.shadowNotePath,
+			);
+
+			if (!note) {
+				return;
+			}
+
+			// Delegate the preview lifecycle to Obsidian.
+			this.app.workspace.trigger("hover-link", {
+				event,
+				source: FILE_REFERENCE_HOVER_SOURCE,
+				hoverParent,
+				targetEl: element,
+				linktext: note.path,
+				sourcePath: "",
+			});
+		});
 
 		const runAction = (action: FileItemOpenAction): void => {
 			// Resolve again to avoid operating on stale records.

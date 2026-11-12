@@ -43,5 +43,9 @@ export class Plugin {
         this.markdownPostProcessor = callback;
     }
 
+    registerHoverLinkSource(id, info) {
+        this.hoverLinkSource = { id, info };
+    }
+
     addRibbonIcon() {}
 }

@@ -17,7 +17,10 @@ import type { FileRecord } from './core/file-interface';
 import type { FileItemOpenAction } from './utils/file-item-gestures';
 import { openWindowsFolder } from './utils/native-path-opener';
 import { FileReferenceService } from './core/file-reference-service';
-import { FileReferenceReadingRenderer } from './ui/file-reference-reading-renderer';
+import {
+	FileReferenceReadingRenderer,
+	FILE_REFERENCE_HOVER_SOURCE,
+} from './ui/file-reference-reading-renderer';
 
 export default class FilePilotPlugin extends Plugin {
 	//the state service owns and persists all plugin data.
@@ -82,9 +85,15 @@ export default class FilePilotPlugin extends Plugin {
 			VIEW_TYPE,
 			(leaf) => new FilePilotView(leaf, this),
 		);
+		// Register File Pilot as a Page Preview source.
+		this.registerHoverLinkSource(FILE_REFERENCE_HOVER_SOURCE, {
+			display: t("pluginTitle"),
+			defaultMod: false,
+		});
 
 		// Register file references in Markdown Reading Mode.
 		const referenceRenderer = new FileReferenceReadingRenderer(
+			this.app,
 			this.fileReferenceService,
 			(action, record) => this.executeFileItemAction(action, record),
 		);

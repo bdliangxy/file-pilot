@@ -50,11 +50,22 @@ function setup(t, records = [makeFileRecord(ID_A)]) {
     let executeAction = async (action, record) => {
         actions.push({ action, record });
     };
+    const previewEvents = [];
+    const existingNotes = new Set(records.map(record => record.shadowNotePath));
+    const app = {
+        vault: {
+            getFileByPath: path => existingNotes.has(path) ? { path } : null,
+        },
+        workspace: {
+            trigger: (name, payload) => previewEvents.push({ name, payload }),
+        },
+    };
     const renderer = new FileReferenceReadingRenderer(
-        service, (action, record) => executeAction(action, record),
+        app, service, (action, record) => executeAction(action, record),
     );
     return {
-        renderer, service, actions, document: dom.window.document, window: dom.window,
+        renderer, service, actions, previewEvents, existingNotes,
+        document: dom.window.document, window: dom.window,
         setExecuteAction(callback) { executeAction = callback; },
     };
 }
@@ -93,6 +104,81 @@ test('renders short and full references with current file names', (t) => {
     assert.deepEqual(references(ctx).map(el => el.textContent), ['report.pdf', 'logo.png']);
 });
 
+test('previews the Shadow Note while displaying the real file name', (t) => {
+    const record = makeFileRecord(ID_A, {
+        path: 'docs/architecture.pdf',
+        shadowNotePath: 'ShadowNotes/architecture.md',
+    });
+    const ctx = setup(t, [record]);
+    paragraph(ctx, shortRef(ID_A));
+    ctx.renderer.render(ctx.document.body);
+    const element = references(ctx)[0];
+
+    mouse(ctx, element, 'mouseover');
+
+    assert.equal(element.textContent, 'architecture.pdf');
+    assert.equal(ctx.previewEvents.length, 1);
+    const { name, payload } = ctx.previewEvents[0];
+    assert.equal(name, 'hover-link');
+    assert.equal(payload.source, 'file-pilot');
+    assert.equal(payload.targetEl, element);
+    assert.equal(payload.linktext, record.shadowNotePath);
+    assert.equal(payload.sourcePath, '');
+    assert.equal(payload.hoverParent.hoverPopover, null);
+});
+
+test('reuses the hover parent and resolves the latest Shadow Note path', (t) => {
+    const original = makeFileRecord(ID_A);
+    const ctx = setup(t, [original]);
+    paragraph(ctx, shortRef(ID_A));
+    ctx.renderer.render(ctx.document.body);
+    const element = references(ctx)[0];
+
+    mouse(ctx, element, 'mouseover');
+    const firstParent = ctx.previewEvents[0].payload.hoverParent;
+
+    const updated = makeFileRecord(ID_A, {
+        shadowNotePath: 'ShadowNotes/renamed.md',
+    });
+    ctx.existingNotes.add(updated.shadowNotePath);
+    ctx.service.rebuildReferenceIndex([updated]);
+    mouse(ctx, element, 'mouseover');
+
+    assert.equal(ctx.previewEvents.length, 2);
+    assert.equal(ctx.previewEvents[1].payload.linktext, updated.shadowNotePath);
+    assert.equal(ctx.previewEvents[1].payload.hoverParent, firstParent);
+});
+
+test('does not preview when the Shadow Note is absent or the reference is removed', (t) => {
+    const record = makeFileRecord(ID_A);
+    const ctx = setup(t, [record]);
+    paragraph(ctx, shortRef(ID_A));
+    ctx.renderer.render(ctx.document.body);
+    const element = references(ctx)[0];
+
+    ctx.existingNotes.delete(record.shadowNotePath);
+    mouse(ctx, element, 'mouseover');
+    assert.equal(ctx.previewEvents.length, 0);
+
+    ctx.existingNotes.add(record.shadowNotePath);
+    ctx.service.rebuildReferenceIndex([]);
+    mouse(ctx, element, 'mouseover');
+    assert.equal(ctx.previewEvents.length, 0);
+});
+
+test('previews a Shadow Note even when its source file is missing', (t) => {
+    const record = makeFileRecord(ID_A, { status: 'missing' });
+    const ctx = setup(t, [record]);
+    paragraph(ctx, shortRef(ID_A));
+    ctx.renderer.render(ctx.document.body);
+    const element = references(ctx)[0];
+
+    mouse(ctx, element, 'mouseover');
+
+    assert.equal(element.textContent, 'report.pdf (Missing)');
+    assert.equal(ctx.previewEvents[0].payload.linktext, record.shadowNotePath);
+});
+
 test('preserves malformed candidates and ignores inline code, code blocks and links', (t) => {
     const ctx = setup(t);
     const raw = shortRef(ID_A);
@@ -128,7 +214,7 @@ test('shows missing and ambiguous references without attaching actions', (t) => 
     ctx.renderer.render(ctx.document.body);
     const elements = references(ctx);
     assert.deepEqual(elements.map(el => el.textContent), [
-        'Ambiguous file reference', 'File reference not found',
+        'Ambiguous file reference', 'This file is not recorded',
     ]);
     assert.ok(elements.every(el => el.classList.contains('file-pilot-reference-unresolved')));
     for (const el of elements) mouse(ctx, el, 'dblclick');
@@ -150,7 +236,7 @@ test('localizes missing and ambiguous references in Chinese', (t) => {
     const elements = references(ctx);
     assert.deepEqual(elements.map(el => el.textContent), [
         '文件引用存在歧义',
-        '未找到文件引用',
+        '该文件未被记录',
     ]);
     assert.deepEqual(elements.map(el => el.title), [
         '多个受管理文件具有相同的引用短 Key。',
@@ -179,7 +265,7 @@ test('localizes missing and ambiguous reference tooltips in English', (t) => {
     const elements = references(ctx);
     assert.deepEqual(elements.map(el => el.textContent), [
         'Ambiguous file reference',
-        'File reference not found',
+        'This file is not recorded',
     ]);
     assert.deepEqual(elements.map(el => el.title), [
         'Multiple managed files share this reference key.',
@@ -197,7 +283,7 @@ test('falls back to English for unresolved references in unsupported locales', (
 
     ctx.renderer.render(ctx.document.body);
 
-    assert.equal(references(ctx)[0].textContent, 'File reference not found');
+    assert.equal(references(ctx)[0].textContent, 'This file is not recorded');
     assert.equal(references(ctx)[0].title, 'No managed file matches this reference.');
 });
 
