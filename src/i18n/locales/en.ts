@@ -102,7 +102,7 @@ export const en = {
 	fileSummaryPlaceholder: 'Add file summary...',
 	fileSummaryEdit: 'Edit file summary',
 	// File reference rendering
-	fileReferenceNotFound: 'File reference not found',
+	fileReferenceNotFound: 'This file is not recorded',
 	fileReferenceNotFoundHint: 'No managed file matches this reference.',
 	fileReferenceAmbiguous: 'Ambiguous file reference',
 	fileReferenceAmbiguousHint: 'Multiple managed files share this reference key.',

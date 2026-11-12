@@ -8,6 +8,7 @@ import { parseFileReference } from "../utils/file-reference-utils";
 import { logger } from "../utils/logger";
 import { notifyFileActionError } from "./file-action-error-notifier";
 import { t } from "../i18n";
+import { displayTooltip } from "obsidian";
 
 
 // Locate candidate references without validating their content.
@@ -135,13 +136,25 @@ export class FileReferenceReadingRenderer {
 
 
 		// Display the current file name.
-		element.textContent = getFullName(result.record.path);
+		const fileName = getFullName(result.record.path);
+
+		element.textContent = result.record.status === "missing"
+			? `${fileName} (${t("fileStatusMissing")})`
+			: fileName;
 
 		const runAction = (action: FileItemOpenAction): void => {
 			// Resolve again to avoid operating on stale records.
 			const current = this.references.resolveFileReference(raw);
 
 			if (current.kind !== "found") {
+				return;
+			}
+
+			// Missing files only support opening their Shadow Notes.
+			if (
+				current.record.status === "missing" &&
+				action !== "openShadowNote"
+			) {
 				return;
 			}
 
