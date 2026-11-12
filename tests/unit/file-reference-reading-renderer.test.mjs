@@ -298,7 +298,7 @@ test('reuses double-click, Ctrl-click and Alt-click without intercepting plain c
     assert.equal(mouse(ctx, el, 'click').defaultPrevented, false);
     await flush();
     assert.deepEqual(ctx.actions.map(a => a.action), [
-        'openSource', 'openContainingFolder', 'openShadowNote',
+        'openSource', 'openShadowNote', 'openContainingFolder',
     ]);
 });
 

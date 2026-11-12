@@ -88,7 +88,7 @@ export default class FilePilotPlugin extends Plugin {
 		// Register File Pilot as a Page Preview source.
 		this.registerHoverLinkSource(FILE_REFERENCE_HOVER_SOURCE, {
 			display: t("pluginTitle"),
-			defaultMod: false,
+			defaultMod: true,
 		});
 
 		// Register file references in Markdown Reading Mode.

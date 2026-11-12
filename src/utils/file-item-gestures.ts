@@ -91,13 +91,13 @@ export const DEFAULT_FILE_ITEM_SHORTCUTS:
 		{
 			type: 'click',
 			button: 0,
-			ctrlKey: true,
+			altKey: true,
 			action: 'openContainingFolder',
 		},
 		{
 			type: 'click',
 			button: 0,
-			altKey: true,
+			ctrlKey: true,
 			action: 'openShadowNote',
 		},
 	];

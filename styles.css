@@ -621,7 +621,7 @@ body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explor
 	margin: 0 -3px;
 
 	overflow-wrap: anywhere;
-	cursor: pointer;
+	cursor: default;
 
 	transition:
 		color 120ms ease,

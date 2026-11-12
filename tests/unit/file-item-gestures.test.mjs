@@ -24,8 +24,8 @@ test('default mapping uses the intended gestures and actions', () => {
     assert.deepEqual(DEFAULT_FILE_ITEM_SHORTCUTS, [
         { type: 'dblclick', button: 0, region: 'item', action: 'openSource' },
         { type: 'dblclick', button: 0, region: 'secondary', action: 'editSummary' },
-        { type: 'click', button: 0, ctrlKey: true, action: 'openContainingFolder' },
-        { type: 'click', button: 0, altKey: true, action: 'openShadowNote' },
+        { type: 'click', button: 0, altKey: true, action: 'openContainingFolder' },
+        { type: 'click', button: 0, ctrlKey: true, action: 'openShadowNote' },
     ]);
 });
 
@@ -38,17 +38,17 @@ test('double-click on the path or summary region requests summary editing', () =
     assert.equal(resolveFileItemAction(mouseEvent('dblclick'), 'secondary'), 'editSummary');
 });
 
-test('Ctrl+left-click opens the containing folder in either region', () => {
+test('Ctrl+left-click opens the Shadow Note in either region', () => {
     const event = mouseEvent('click', { ctrlKey: true });
     for (const region of ['item', 'secondary']) {
-        assert.equal(resolveFileItemAction(event, region), 'openContainingFolder');
+        assert.equal(resolveFileItemAction(event, region), 'openShadowNote');
     }
 });
 
-test('Alt+left-click opens the Shadow Note in either region', () => {
+test('Alt+left-click opens the containing folder in either region', () => {
     const event = mouseEvent('click', { altKey: true });
     for (const region of ['item', 'secondary']) {
-        assert.equal(resolveFileItemAction(event, region), 'openShadowNote');
+        assert.equal(resolveFileItemAction(event, region), 'openContainingFolder');
     }
 });
 

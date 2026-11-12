@@ -345,8 +345,8 @@ test('default gesture actions dispatch to FileActionService without executing ed
     const record = makeRecord('docs/report.pdf');
     const cases = [
         [mouseEvent('dblclick'), 'item', 'openSource'],
-        [mouseEvent('click', { ctrlKey: true }), 'secondary', 'openContainingFolder'],
-        [mouseEvent('click', { altKey: true }), 'item', 'openShadowNote'],
+        [mouseEvent('click', { ctrlKey: true }), 'secondary', 'openShadowNote'],
+        [mouseEvent('click', { altKey: true }), 'item', 'openContainingFolder'],
         [mouseEvent('dblclick'), 'secondary', 'editSummary'],
     ];
 
