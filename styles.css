@@ -678,3 +678,8 @@ body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explor
 		transition: none;
 	}
 }
+
+/* Keep the selection background when the widget is hovered. */
+.cm-content .file-pilot-reference.file-pilot-reference-selected {
+	background-color: var(--text-selection);
+}

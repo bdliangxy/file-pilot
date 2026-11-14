@@ -11,8 +11,19 @@ export { Component, TFile, TFolder } from './obsidian-watcher.mjs';
 
 export class App {}
 
-// Stand-in for Obsidian's editor mode state field.
-export const editorLivePreviewField = Symbol('editorLivePreviewField');
+import { StateEffect, StateField } from '@codemirror/state';
+
+// A real StateField lets editor transaction tests exercise Live Preview mode.
+export const setLivePreviewMode = StateEffect.define();
+export const editorLivePreviewField = StateField.define({
+    create: () => true,
+    update(value, transaction) {
+        for (const effect of transaction.effects) {
+            if (effect.is(setLivePreviewMode)) return effect.value;
+        }
+        return value;
+    },
+});
 
 export class Plugin {
     constructor(app) {

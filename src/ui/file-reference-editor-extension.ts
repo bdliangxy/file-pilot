@@ -1,9 +1,11 @@
 
 import { editorLivePreviewField } from "obsidian";
 import { syntaxTree } from "@codemirror/language";
-import type {
+import {
 	EditorState,
-	Range,
+	type Range,
+	type Transaction,
+	type TransactionSpec,
 } from "@codemirror/state";
 import {
 	Decoration,
@@ -55,11 +57,162 @@ function isExcludedRange(
 	return false;
 }
 
+interface ReferenceRange {
+	from: number;
+	to: number;
+}
+
+// Find a reference whose interior contains the position.
+function findReferenceAt(
+	state: EditorState,
+	position: number,
+): ReferenceRange | null {
+	if (position <= 0 || position >= state.doc.length) {
+		return null;
+	}
+
+	const line = state.doc.lineAt(position);
+
+	if (!line.text.includes("|||")) {
+		return null;
+	}
+
+	for (const match of findFileReferenceMatches(line.text)) {
+		const from = line.from + match.start;
+		const to = line.from + match.end;
+
+		if (from < position && position < to) {
+			if (!isExcludedRange(state, from, to)) {
+				return { from, to };
+			}
+		}
+	}
+
+	return null;
+}
+
+// Expand partial reference edits into atomic edits.
+function protectReferenceChanges(
+	tr: Transaction,
+): TransactionSpec | readonly TransactionSpec[] {
+	const state = tr.startState;
+
+	if (
+		!tr.docChanged ||
+		state.field(editorLivePreviewField, false) !== true
+	) {
+		return tr;
+	}
+
+	const extraDeletions: {
+		from: number;
+		to: number;
+	}[] = [];
+
+	const handledReferences = new Set<string>();
+	let reject = false;
+
+	tr.changes.iterChanges((fromA, toA) => {
+		if (reject) return;
+
+		const startRef = findReferenceAt(state, fromA);
+
+		// Reject pure insertion inside a reference.
+		if (fromA === toA) {
+			if (startRef !== null) {
+				reject = true;
+			}
+			return;
+		}
+
+		const endRef = findReferenceAt(state, toA);
+
+		// Avoid conflicting edits to the same reference.
+		const affected = new Map<string, ReferenceRange>();
+
+		for (const ref of [startRef, endRef]) {
+			if (ref !== null) {
+				affected.set(`${ref.from}:${ref.to}`, ref);
+			}
+		}
+
+		for (const key of affected.keys()) {
+			if (handledReferences.has(key)) {
+				reject = true;
+				return;
+			}
+
+			handledReferences.add(key);
+		}
+
+		// Remove the surviving prefix of a reference.
+		if (startRef !== null) {
+			const from = tr.changes.mapPos(
+				startRef.from, 1
+			);
+			const to = tr.changes.mapPos(
+				fromA, -1
+			);
+
+			if (from < to) {
+				extraDeletions.push({ from, to });
+			}
+		}
+
+		// Remove the surviving suffix of a reference.
+		if (endRef !== null) {
+			const from = tr.changes.mapPos(
+				toA, 1
+			);
+			const to = tr.changes.mapPos(
+				endRef.to, -1
+			);
+
+			if (from < to) {
+				extraDeletions.push({ from, to });
+			}
+		}
+	});
+
+	// Cancel unsupported conflicting modifications.
+	if (reject) {
+		return {};
+	}
+
+	if (extraDeletions.length === 0) {
+		return tr;
+	}
+
+	// Merge overlapping supplemental deletions.
+	extraDeletions.sort((a, b) => a.from - b.from);
+
+	const merged: typeof extraDeletions = [];
+
+	for (const range of extraDeletions) {
+		const previous = merged[merged.length - 1];
+
+		if (previous && range.from <= previous.to) {
+			previous.to = Math.max(previous.to, range.to);
+		} else {
+			merged.push({ ...range });
+		}
+	}
+
+	return [
+		tr,
+		{
+			changes: merged,
+			sequential: true,
+		},
+	];
+}
+
 // Display-only widget for a resolved file reference.
 
 class FileReferenceWidget extends WidgetType {
 	constructor(
 		private readonly display: FileReferenceDisplay,
+		private readonly selected: boolean,
 	) {
 		super();
 	}
@@ -69,7 +222,8 @@ class FileReferenceWidget extends WidgetType {
 			other instanceof FileReferenceWidget &&
 			this.display.text === other.display.text &&
 			this.display.unresolved === other.display.unresolved &&
-			this.display.hint === other.display.hint
+			this.display.hint === other.display.hint &&
+			this.selected === other.selected
 		);
 	}
 
@@ -88,6 +242,10 @@ class FileReferenceWidget extends WidgetType {
 
 		if (this.display.hint !== undefined) {
 			element.title = this.display.hint;
+		}
+
+		if (this.selected) {
+			element.classList.add("file-pilot-reference-selected");
 		}
 
 		// Prevent direct editing of the displayed element.
@@ -178,9 +336,19 @@ export function createFileReferenceEditorExtension(
 						continue;
 					}
 
+					const selected = view.state.selection.ranges.some(
+						range =>
+							!range.empty &&
+							range.from <= absoluteStart &&
+							range.to >= absoluteEnd,
+					);
+
 					ranges.push(
 						Decoration.replace({
-							widget: new FileReferenceWidget(display),
+							widget: new FileReferenceWidget(
+								display,
+								selected,
+							),
 						}).range(absoluteStart, absoluteEnd),
 					);
 				}
@@ -215,6 +383,7 @@ export function createFileReferenceEditorExtension(
 				if (
 					update.docChanged ||
 					update.viewportChanged ||
+					update.selectionSet ||
 					previousMode !== currentMode ||
 					syntaxTree(update.startState) !==
 					syntaxTree(update.state)
@@ -227,6 +396,18 @@ export function createFileReferenceEditorExtension(
 		},
 		{
 			decorations: plugin => plugin.decorations,
+
+			provide: plugin => [
+				EditorView.atomicRanges.of(
+					view =>
+						view.plugin(plugin)?.decorations
+						?? Decoration.none
+				),
+
+				EditorState.transactionFilter.of(
+					protectReferenceChanges
+				),
+			],
 		},
 	);
 }

@@ -22,13 +22,24 @@ export const Decoration = {
     },
 };
 
+// Record the atomic range provider without requiring a browser EditorView.
+export const EditorView = {
+    atomicRanges: {
+        of(readRanges) {
+            return { kind: 'atomicRanges', readRanges };
+        },
+    },
+};
+
 export const ViewPlugin = {
     fromClass(PluginClass, config) {
-        return {
+        const extension = {
             create(view) {
                 return new PluginClass(view);
             },
             decorations: config.decorations,
         };
+        extension.provided = config.provide?.(extension) ?? [];
+        return extension;
     },
 };

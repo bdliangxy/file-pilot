@@ -54,7 +54,7 @@ function makeDocument(text) {
     };
 }
 
-function makeState(text, { live = true, excluded = [] } = {}) {
+function makeState(text, { live = true, excluded = [], selections = [] } = {}) {
     const doc = makeDocument(text);
     const syntaxTree = {
         resolveInner(position) {
@@ -68,6 +68,13 @@ function makeState(text, { live = true, excluded = [] } = {}) {
     return {
         doc,
         syntaxTree,
+        selection: {
+            ranges: selections.map(({ from, to }) => ({
+                from,
+                to,
+                empty: from === to,
+            })),
+        },
         field(field, fallback) {
             assert.equal(field, editorLivePreviewField);
             return live ?? fallback;
@@ -80,6 +87,7 @@ function setup(t, text, {
     live = true,
     visibleRanges = [{ from: 0, to: text.length }],
     excluded = [],
+    selections = [],
 } = {}) {
     const previousCreateSpan = globalThis.createSpan;
     const dom = new JSDOM('<!doctype html><html><body></body></html>');
@@ -96,7 +104,7 @@ function setup(t, text, {
     const service = new FileReferenceService();
     service.rebuildReferenceIndex(records);
     const extension = createFileReferenceEditorExtension(service);
-    const state = makeState(text, { live, excluded });
+    const state = makeState(text, { live, excluded, selections });
     const view = { state, visibleRanges };
     const plugin = extension.create(view);
     return { plugin, extension, state, view, service };
@@ -292,4 +300,91 @@ test('Widget uses localized unresolved text and hint', t => {
     const element = rendered(ctx)[0].dom;
     assert.equal(element.textContent, '该文件未被记录');
     assert.equal(element.title, '没有与此引用匹配的受管理文件。');
+});
+
+test('selected full reference uses the selected widget class', t => {
+    const ref = shortRef(ID_A);
+    const text = `before ${ref} after`;
+    const from = text.indexOf(ref);
+    const ctx = setup(t, text, {
+        selections: [{ from, to: from + ref.length }],
+    });
+    const widget = rendered(ctx)[0].dom;
+
+    assert.equal(widget.classList.contains('file-pilot-reference-selected'), true);
+    assert.equal(widget.contentEditable, 'false');
+});
+
+test('partial selection does not mark a reference fully selected', t => {
+    const ref = shortRef(ID_A);
+    const text = `before ${ref} after`;
+    const from = text.indexOf(ref);
+    const ctx = setup(t, text, {
+        selections: [{ from: from + 2, to: from + ref.length }],
+    });
+
+    assert.equal(
+        rendered(ctx)[0].dom.classList.contains('file-pilot-reference-selected'),
+        false,
+    );
+});
+
+test('selection change refreshes the selected widget without editing source text', t => {
+    const ref = shortRef(ID_A);
+    const text = `before ${ref} after`;
+    const from = text.indexOf(ref);
+    const ctx = setup(t, text);
+    const original = ctx.view.state;
+    const initialWidget = decorations(ctx)[0].widget;
+
+    assert.equal(rendered(ctx)[0].dom.classList.contains('file-pilot-reference-selected'), false);
+
+    ctx.view.state = makeState(text, {
+        selections: [{ from, to: from + ref.length }],
+    });
+    ctx.plugin.update({
+        view: ctx.view,
+        startState: original,
+        state: ctx.view.state,
+        docChanged: false,
+        viewportChanged: false,
+        selectionSet: true,
+    });
+
+    assert.equal(rendered(ctx)[0].dom.classList.contains('file-pilot-reference-selected'), true);
+    assert.equal(initialWidget.eq(decorations(ctx)[0].widget), false);
+
+    const selectedState = ctx.view.state;
+    ctx.view.state = makeState(text);
+    ctx.plugin.update({
+        view: ctx.view,
+        startState: selectedState,
+        state: ctx.view.state,
+        docChanged: false,
+        viewportChanged: false,
+        selectionSet: true,
+    });
+    assert.equal(rendered(ctx)[0].dom.classList.contains('file-pilot-reference-selected'), false);
+    assert.equal(ctx.view.state.doc.length, text.length);
+});
+
+test('atomic range provider reuses decorations and returns none when plugin is absent', t => {
+    const ref = shortRef(ID_A);
+    const ctx = setup(t, ref);
+    const atomic = ctx.extension.provided[0];
+
+    assert.equal(atomic.kind, 'atomicRanges');
+    assert.equal(atomic.readRanges({ plugin: extension => extension === ctx.extension ? ctx.plugin : null }), decorations(ctx));
+    assert.deepEqual(atomic.readRanges({ plugin: () => null }), []);
+});
+
+test('Source Mode has no selected widgets or atomic ranges', t => {
+    const ref = shortRef(ID_A);
+    const ctx = setup(t, ref, {
+        live: false,
+        selections: [{ from: 0, to: ref.length }],
+    });
+    const atomic = ctx.extension.provided[0];
+    assert.equal(rendered(ctx).length, 0);
+    assert.deepEqual(atomic.readRanges({ plugin: () => ctx.plugin }), []);
 });
