@@ -3,6 +3,7 @@ import { editorLivePreviewField } from "obsidian";
 import { syntaxTree } from "@codemirror/language";
 import {
 	EditorState,
+	StateEffect,
 	type Range,
 	type Transaction,
 	type TransactionSpec,
@@ -26,6 +27,9 @@ import {
 	createFileReferenceElement,
 	type ExecuteFileReferenceAction,
 } from "./file-reference-element";
+
+// Signal that the FileRecord reference index has changed.
+const refreshFileReferences = StateEffect.define<void>();
 
 // Check whether a reference is inside Markdown syntax
 // that should not be replaced.
@@ -363,8 +367,38 @@ export function createFileReferenceEditorExtension(
 		class {
 			decorations: DecorationSet;
 
+			private unsubscribe: () => void;
+			private disposed = false;
+			private refreshQueued = false;
+
 			constructor(view: EditorView) {
 				this.decorations = buildDecorations(view);
+
+				this.unsubscribe = references.onIndexChanged(() => {
+					if (this.disposed || this.refreshQueued) {
+						return;
+					}
+
+					this.refreshQueued = true;
+
+					// Defer dispatch until the current update finishes.
+					queueMicrotask(() => {
+						this.refreshQueued = false;
+
+						if (this.disposed) {
+							return;
+						}
+
+						view.dispatch({
+							effects: refreshFileReferences.of(undefined),
+						});
+					});
+				});
+			}
+
+			destroy(): void {
+				this.disposed = true;
+				this.unsubscribe();
 			}
 
 			update(update: ViewUpdate): void {
@@ -380,18 +414,26 @@ export function createFileReferenceEditorExtension(
 						false,
 					);
 
+
+				const indexChanged = update.transactions?.some(
+					transaction =>
+						transaction.effects.some(
+							effect => effect.is(refreshFileReferences),
+						),
+				) ?? false;
+
 				if (
 					update.docChanged ||
 					update.viewportChanged ||
 					update.selectionSet ||
 					previousMode !== currentMode ||
 					syntaxTree(update.startState) !==
-					syntaxTree(update.state)
+					syntaxTree(update.state) ||
+					indexChanged
 				) {
-					this.decorations = buildDecorations(
-						update.view,
-					);
+					this.decorations = buildDecorations(update.view);
 				}
+
 			}
 		},
 		{

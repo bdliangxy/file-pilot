@@ -193,3 +193,47 @@ test('returns ambiguous for colliding short references', () => {
         { kind: 'ambiguous' },
     );
 });
+
+test('index change listeners observe fully published short and full indexes', () => {
+    const service = new FileReferenceService();
+    const first = makeFileRecord(ID_A, { path: 'docs/old.pdf' });
+    const updated = makeFileRecord(ID_A, { path: 'docs/new.pdf' });
+    const snapshots = [];
+
+    const unsubscribe = service.onIndexChanged(() => {
+        snapshots.push({
+            short: service.resolveShortKey(generateShortKey(ID_A)),
+            full: service.resolveFileId(ID_A),
+        });
+    });
+
+    service.rebuildReferenceIndex([first]);
+    service.rebuildReferenceIndex([updated]);
+    service.rebuildReferenceIndex([]);
+
+    assert.equal(snapshots.length, 3);
+    assert.strictEqual(snapshots[0].short.record, first);
+    assert.strictEqual(snapshots[0].full, first);
+    assert.strictEqual(snapshots[1].short.record, updated);
+    assert.strictEqual(snapshots[1].full, updated);
+    assert.deepEqual(snapshots[2].short, { kind: 'missing' });
+    assert.equal(snapshots[2].full, undefined);
+
+    unsubscribe();
+});
+
+test('index listeners unsubscribe independently without affecting other listeners', () => {
+    const service = new FileReferenceService();
+    const calls = [];
+    const stopFirst = service.onIndexChanged(() => calls.push('first'));
+    const stopSecond = service.onIndexChanged(() => calls.push('second'));
+
+    service.rebuildReferenceIndex([makeFileRecord(ID_A)]);
+    stopFirst();
+    stopFirst();
+    service.rebuildReferenceIndex([]);
+    stopSecond();
+    service.rebuildReferenceIndex([makeFileRecord(ID_B)]);
+
+    assert.deepEqual(calls, ['first', 'second', 'second']);
+});

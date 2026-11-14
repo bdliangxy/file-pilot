@@ -24,6 +24,18 @@ export class FileReferenceService {
 	// idIndex: Look up FileRecord by full UUID.
 	private idIndex = new Map<string, FileRecord>();
 
+	private readonly indexChangedListeners = new Set<() => void>();
+
+	// Subscribe to reference index changes.
+	onIndexChanged(listener: () => void): () => void {
+		this.indexChangedListeners.add(listener);
+
+		// Return an unsubscribe function.
+		return () => {
+			this.indexChangedListeners.delete(listener);
+		};
+	}
+
 	// Rebuild the in-memory index from current FileRecords.
 	rebuildReferenceIndex(records: readonly FileRecord[]): void {
 		const nextKeyIndex = new Map<string, FileRecord | null>();
@@ -45,6 +57,10 @@ export class FileReferenceService {
 
 		this.keyIndex = nextKeyIndex;
 		this.idIndex = nextIdIndex;
+		// Notify subscribers only after publishing both indexes.
+		for (const listener of this.indexChangedListeners) {
+			listener();
+		}
 	}
 
 

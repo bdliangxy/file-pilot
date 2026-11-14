@@ -88,6 +88,7 @@ function setup(t, text, {
     visibleRanges = [{ from: 0, to: text.length }],
     excluded = [],
     selections = [],
+    sharedService = null,
 } = {}) {
     const previousCreateSpan = globalThis.createSpan;
     const dom = new JSDOM('<!doctype html><html><body></body></html>');
@@ -101,8 +102,8 @@ function setup(t, text, {
         else globalThis.createSpan = previousCreateSpan;
         dom.window.close();
     });
-    const service = new FileReferenceService();
-    service.rebuildReferenceIndex(records);
+    const service = sharedService ?? new FileReferenceService();
+    if (!sharedService) service.rebuildReferenceIndex(records);
     const actions = [];
     const previewEvents = [];
     const existingNotes = new Set(records.map(record => record.shadowNotePath));
@@ -121,11 +122,31 @@ function setup(t, text, {
         service, app, (action, record) => executeAction(action, record),
     );
     const state = makeState(text, { live, excluded, selections });
-    const view = { state, visibleRanges };
+    const dispatched = [];
+    const view = {
+        state,
+        visibleRanges,
+        dispatch(spec) {
+            dispatched.push(spec);
+            const effects = Array.isArray(spec.effects)
+                ? spec.effects
+                : [spec.effects];
+            plugin.update({
+                view,
+                startState: view.state,
+                state: view.state,
+                docChanged: false,
+                viewportChanged: false,
+                selectionSet: false,
+                transactions: [{ effects }],
+            });
+        },
+    };
     const plugin = extension.create(view);
+    t.after(() => plugin.destroy());
     return {
         plugin, extension, state, view, service, actions, previewEvents,
-        existingNotes, app, window: dom.window,
+        existingNotes, app, window: dom.window, dispatched,
         setExecuteAction(callback) { executeAction = callback; },
     };
 }
@@ -530,4 +551,99 @@ test('Live Preview widget reports rejected file actions through the shared notif
     } finally {
         console.error = previousError;
     }
+});
+
+async function flushReferenceRefresh() {
+    await new Promise(resolve => setImmediate(resolve));
+}
+
+test('index rebuild refreshes an existing widget without changing editor document', async t => {
+    const record = makeFileRecord(ID_A, { path: 'docs/original.pdf' });
+    const ctx = setup(t, shortRef(ID_A), { records: [record] });
+    const beforeDoc = ctx.view.state.doc;
+    const beforeWidget = decorations(ctx)[0].widget;
+
+    ctx.service.rebuildReferenceIndex([
+        makeFileRecord(ID_A, { path: 'docs/renamed.pdf' }),
+    ]);
+
+    assert.equal(ctx.dispatched.length, 0, 'refresh is deferred');
+    await flushReferenceRefresh();
+
+    assert.equal(ctx.dispatched.length, 1);
+    assert.equal(rendered(ctx)[0].dom.textContent, 'renamed.pdf');
+    assert.equal(ctx.view.state.doc, beforeDoc);
+    assert.equal(beforeWidget.eq(decorations(ctx)[0].widget), false);
+});
+
+test('multiple index rebuilds in the same turn coalesce into one refresh', async t => {
+    const ctx = setup(t, shortRef(ID_A));
+    ctx.service.rebuildReferenceIndex([
+        makeFileRecord(ID_A, { path: 'docs/intermediate.pdf' }),
+    ]);
+    ctx.service.rebuildReferenceIndex([
+        makeFileRecord(ID_A, { path: 'docs/final.pdf' }),
+    ]);
+    await flushReferenceRefresh();
+
+    assert.equal(ctx.dispatched.length, 1);
+    assert.equal(rendered(ctx)[0].dom.textContent, 'final.pdf');
+});
+
+test('index removal and reappearance update unresolved widget state', async t => {
+    const ctx = setup(t, shortRef(ID_A));
+
+    ctx.service.rebuildReferenceIndex([]);
+    await flushReferenceRefresh();
+    assert.equal(rendered(ctx)[0].dom.textContent, 'This file is not recorded');
+    assert.equal(rendered(ctx)[0].dom.classList.contains('file-pilot-reference-unresolved'), true);
+
+    ctx.service.rebuildReferenceIndex([
+        makeFileRecord(ID_A, { path: 'docs/restored.pdf' }),
+    ]);
+    await flushReferenceRefresh();
+    assert.equal(rendered(ctx)[0].dom.textContent, 'restored.pdf');
+    assert.equal(rendered(ctx)[0].dom.classList.contains('file-pilot-reference-unresolved'), false);
+    assert.equal(ctx.dispatched.length, 2);
+});
+
+test('separate editor instances respond independently to a shared index', async t => {
+    const first = setup(t, shortRef(ID_A));
+    const second = setup(t, shortRef(ID_A), {
+        sharedService: first.service,
+    });
+
+    first.service.rebuildReferenceIndex([
+        makeFileRecord(ID_A, { path: 'docs/shared.pdf' }),
+    ]);
+    await flushReferenceRefresh();
+
+    assert.equal(first.dispatched.length, 1);
+    assert.equal(second.dispatched.length, 1);
+    assert.equal(rendered(first)[0].dom.textContent, 'shared.pdf');
+    assert.equal(rendered(second)[0].dom.textContent, 'shared.pdf');
+    assert.equal(first.view.state.doc, first.state.doc);
+    assert.equal(second.view.state.doc, second.state.doc);
+});
+
+test('destroy before queued refresh prevents dispatch and unsubscribes', async t => {
+    const ctx = setup(t, shortRef(ID_A));
+    ctx.service.rebuildReferenceIndex([]);
+    ctx.plugin.destroy();
+
+    await flushReferenceRefresh();
+    assert.equal(ctx.dispatched.length, 0);
+
+    ctx.service.rebuildReferenceIndex([makeFileRecord(ID_A)]);
+    await flushReferenceRefresh();
+    assert.equal(ctx.dispatched.length, 0);
+});
+
+test('Source Mode receives refresh signals but keeps raw references undecorated', async t => {
+    const ctx = setup(t, shortRef(ID_A), { live: false });
+    ctx.service.rebuildReferenceIndex([]);
+    await flushReferenceRefresh();
+
+    assert.equal(ctx.dispatched.length, 1);
+    assert.equal(decorations(ctx).length, 0);
 });
