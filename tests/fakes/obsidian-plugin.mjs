@@ -11,6 +11,9 @@ export { Component, TFile, TFolder } from './obsidian-watcher.mjs';
 
 export class App {}
 
+// Stand-in for Obsidian's editor mode state field.
+export const editorLivePreviewField = Symbol('editorLivePreviewField');
+
 export class Plugin {
     constructor(app) {
         this.app = app;
@@ -41,6 +44,10 @@ export class Plugin {
 
     registerMarkdownPostProcessor(callback) {
         this.markdownPostProcessor = callback;
+    }
+
+    registerEditorExtension(extension) {
+        this.editorExtension = extension;
     }
 
     registerHoverLinkSource(id, info) {

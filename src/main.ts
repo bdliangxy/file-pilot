@@ -21,6 +21,9 @@ import {
 	FileReferenceReadingRenderer,
 	FILE_REFERENCE_HOVER_SOURCE,
 } from './ui/file-reference-reading-renderer';
+import {
+	createFileReferenceEditorExtension,
+} from './ui/file-reference-editor-extension';
 
 export default class FilePilotPlugin extends Plugin {
 	//the state service owns and persists all plugin data.
@@ -101,6 +104,13 @@ export default class FilePilotPlugin extends Plugin {
 		this.registerMarkdownPostProcessor((element) => {
 			referenceRenderer.render(element);
 		});
+
+		// Register file references in the CodeMirror editor.
+		this.registerEditorExtension(
+			createFileReferenceEditorExtension(
+				this.fileReferenceService,
+			),
+		);
 
 		// Add the ribbon icon.
 		this.addRibbonIcon(

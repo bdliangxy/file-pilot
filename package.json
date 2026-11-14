@@ -30,6 +30,9 @@
 		"typescript-eslint": "^8.59.1"
 	},
 	"dependencies": {
+		"@codemirror/language": "^6.13.1",
+		"@codemirror/state": "6.7.6",
+		"@codemirror/view": "6.43.13",
 		"ignore": "^7.0.12",
 		"mdast-util-to-string": "^4.0.0",
 		"remark-frontmatter": "^5.0.0",

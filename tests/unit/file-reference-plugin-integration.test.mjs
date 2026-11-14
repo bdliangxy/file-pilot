@@ -133,6 +133,8 @@ test('onload indexes persisted FileRecords before any scan', async (t) => {
     });
     const { plugin } = await setup(t, { records: [first, second] });
 
+    assert.equal(typeof plugin.markdownPostProcessor, 'function');
+    assert.ok(plugin.editorExtension, 'Live Preview extension is registered');
     assert.equal(lookup(plugin, ID_A).kind, 'found');
     assert.equal(lookup(plugin, ID_A).record.path, first.path);
     assert.equal(lookup(plugin, ID_B).record.status, 'missing');

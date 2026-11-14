@@ -607,7 +607,7 @@ body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explor
 	font: inherit;
 }
 
-/* File references in Markdown Reading Mode. */
+/* Shared file reference styles for Reading Mode and Live Preview. */
 .file-pilot-reference {
 	color: var(--text-accent);
 	font-weight: 500;
@@ -626,6 +626,22 @@ body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explor
 	transition:
 		color 120ms ease,
 		background-color 120ms ease;
+}
+
+/* Allow Live Preview reference widgets to wrap without clipping. */
+.cm-content .file-pilot-reference {
+	display: inline-block;
+	vertical-align: baseline;
+
+	max-width: 100%;
+	min-width: 0;
+
+	white-space: normal;
+	overflow-wrap: anywhere;
+	word-break: normal;
+
+	margin: 0;
+	user-select: none;
 }
 
 /* Highlight interactive references on hover. */

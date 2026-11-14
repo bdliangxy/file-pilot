@@ -2,19 +2,14 @@
 import type { FileRecord } from "../core/file-interface";
 import type { FileItemOpenAction } from "../utils/file-item-gestures";
 import { FileReferenceService } from "../core/file-reference-service";
-import { getFullName } from "../utils/path-utils";
 import { resolveFileItemAction } from "../utils/file-item-gestures";
-import { parseFileReference } from "../utils/file-reference-utils";
+import { findFileReferenceMatches } from "../utils/file-reference-utils";
 import { logger } from "../utils/logger";
 import { notifyFileActionError } from "./file-action-error-notifier";
-import { t } from "../i18n";
+import { getFileReferenceDisplay } from "./file-reference-display";
 import type { App, HoverParent } from "obsidian";
 
 export const FILE_REFERENCE_HOVER_SOURCE = "file-pilot";
-
-// Locate candidate references without validating their content.
-const REFERENCE_PATTERN =
-	/(?<!\|)\|\|\|[^|\r\n]*\|\|\|(?!\|)/g;
 
 type ExecuteAction = (
 	action: FileItemOpenAction,
@@ -61,12 +56,8 @@ export class FileReferenceReadingRenderer {
 
 	private renderTextNode(node: Text): void {
 		const source = node.data;
-		const matches = [...source.matchAll(REFERENCE_PATTERN)];
-		if (
-			matches.every(match =>
-				parseFileReference(match[0]) === null
-			)
-		) {
+		const matches = findFileReferenceMatches(source);
+		if (matches.length === 0) {
 			return;
 		}
 
@@ -74,8 +65,8 @@ export class FileReferenceReadingRenderer {
 		let offset = 0;
 
 		for (const match of matches) {
-			const start = match.index;
-			const raw = match[0];
+			const start = match.start;
+			const raw = match.raw;
 
 			// Preserve ordinary text before the reference.
 			fragment.append(source.slice(offset, start));
@@ -94,9 +85,10 @@ export class FileReferenceReadingRenderer {
 
 	private createReferenceNode(raw: string): Node {
 		const result = this.references.resolveFileReference(raw);
+		const display = getFileReferenceDisplay(result);
 
-		// Invalid syntax should remain ordinary text.
-		if (result.kind === "invalid") {
+		// Keep invalid references as plain text.
+		if (display === null) {
 			return document.createTextNode(raw);
 		}
 
@@ -104,24 +96,19 @@ export class FileReferenceReadingRenderer {
 			cls: "file-pilot-reference",
 		});
 
+		element.textContent = display.text;
 
-		if (result.kind !== "found") {
-			switch (result.kind) {
-				case "missing":
-					element.textContent = t("fileReferenceNotFound");
-					element.title = t("fileReferenceNotFoundHint");
-					break;
+		if (display.hint !== undefined) {
+			element.title = display.hint;
+		}
 
-				case "ambiguous":
-					element.textContent = t("fileReferenceAmbiguous");
-					element.title = t("fileReferenceAmbiguousHint");
-					break;
-			}
-
+		if (display.unresolved) {
 			element.classList.add(
 				"file-pilot-reference-unresolved",
 			);
+		}
 
+		if (result.kind !== "found") {
 			const logKey = `${result.kind}:${raw}`;
 
 			if (!this.loggedUnresolvedReferences.has(logKey)) {
@@ -135,14 +122,6 @@ export class FileReferenceReadingRenderer {
 
 			return element;
 		}
-
-
-		// Display the current file name.
-		const fileName = getFullName(result.record.path);
-
-		element.textContent = result.record.status === "missing"
-			? `${fileName} (${t("fileStatusMissing")})`
-			: fileName;
 
 		// Keep a stable hover parent for this reference element.
 		const hoverParent: HoverParent = {
