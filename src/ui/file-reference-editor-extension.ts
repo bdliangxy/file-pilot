@@ -1,4 +1,4 @@
-
+import type { App } from "obsidian";
 import { editorLivePreviewField } from "obsidian";
 import { syntaxTree } from "@codemirror/language";
 import {
@@ -22,6 +22,10 @@ import {
 	getFileReferenceDisplay,
 	type FileReferenceDisplay,
 } from "./file-reference-display";
+import {
+	createFileReferenceElement,
+	type ExecuteFileReferenceAction,
+} from "./file-reference-element";
 
 // Check whether a reference is inside Markdown syntax
 // that should not be replaced.
@@ -209,10 +213,15 @@ function protectReferenceChanges(
 
 // Display-only widget for a resolved file reference.
 
+
 class FileReferenceWidget extends WidgetType {
 	constructor(
+		private readonly raw: string,
 		private readonly display: FileReferenceDisplay,
 		private readonly selected: boolean,
+		private readonly app: App,
+		private readonly references: FileReferenceService,
+		private readonly executeAction: ExecuteFileReferenceAction,
 	) {
 		super();
 	}
@@ -220,6 +229,7 @@ class FileReferenceWidget extends WidgetType {
 	eq(other: WidgetType): boolean {
 		return (
 			other instanceof FileReferenceWidget &&
+			this.raw === other.raw &&
 			this.display.text === other.display.text &&
 			this.display.unresolved === other.display.unresolved &&
 			this.display.hint === other.display.hint &&
@@ -228,37 +238,23 @@ class FileReferenceWidget extends WidgetType {
 	}
 
 	toDOM(): HTMLElement {
-		const element = createSpan({
-			cls: "file-pilot-reference",
+		return createFileReferenceElement({
+			app: this.app,
+			references: this.references,
+			executeAction: this.executeAction,
+			raw: this.raw,
+			display: this.display,
+			selected: this.selected,
 		});
-
-		element.textContent = this.display.text;
-
-		if (this.display.unresolved) {
-			element.classList.add(
-				"file-pilot-reference-unresolved",
-			);
-		}
-
-		if (this.display.hint !== undefined) {
-			element.title = this.display.hint;
-		}
-
-		if (this.selected) {
-			element.classList.add("file-pilot-reference-selected");
-		}
-
-		// Prevent direct editing of the displayed element.
-		element.contentEditable = "false";
-		element.spellcheck = false;
-
-		return element;
 	}
 }
 
 
+
 export function createFileReferenceEditorExtension(
 	references: FileReferenceService,
+	app: App,
+	executeAction: ExecuteFileReferenceAction,
 ) {
 
 	function buildDecorations(
@@ -346,8 +342,12 @@ export function createFileReferenceEditorExtension(
 					ranges.push(
 						Decoration.replace({
 							widget: new FileReferenceWidget(
+								raw,
 								display,
 								selected,
+								app,
+								references,
+								executeAction,
 							),
 						}).range(absoluteStart, absoluteEnd),
 					);

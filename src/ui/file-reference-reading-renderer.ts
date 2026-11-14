@@ -1,27 +1,24 @@
-
-import type { FileRecord } from "../core/file-interface";
-import type { FileItemOpenAction } from "../utils/file-item-gestures";
+import type { App } from "obsidian";
 import { FileReferenceService } from "../core/file-reference-service";
-import { resolveFileItemAction } from "../utils/file-item-gestures";
 import { findFileReferenceMatches } from "../utils/file-reference-utils";
 import { logger } from "../utils/logger";
-import { notifyFileActionError } from "./file-action-error-notifier";
 import { getFileReferenceDisplay } from "./file-reference-display";
-import type { App, HoverParent } from "obsidian";
+import {
+	createFileReferenceElement,
+	type ExecuteFileReferenceAction,
+} from "./file-reference-element";
 
-export const FILE_REFERENCE_HOVER_SOURCE = "file-pilot";
-
-type ExecuteAction = (
-	action: FileItemOpenAction,
-	record: FileRecord,
-) => Promise<void>;
+// Preserve the existing public export.
+export {
+	FILE_REFERENCE_HOVER_SOURCE,
+} from "./file-reference-element";
 
 export class FileReferenceReadingRenderer {
 	private readonly loggedUnresolvedReferences = new Set<string>();
 	constructor(
 		private readonly app: App,
 		private readonly references: FileReferenceService,
-		private readonly executeAction: ExecuteAction,
+		private readonly executeAction: ExecuteFileReferenceAction,
 	) { }
 
 	render(container: HTMLElement): void {
@@ -83,29 +80,13 @@ export class FileReferenceReadingRenderer {
 		node.replaceWith(fragment);
 	}
 
+
 	private createReferenceNode(raw: string): Node {
 		const result = this.references.resolveFileReference(raw);
 		const display = getFileReferenceDisplay(result);
 
-		// Keep invalid references as plain text.
 		if (display === null) {
 			return document.createTextNode(raw);
-		}
-
-		const element = createSpan({
-			cls: "file-pilot-reference",
-		});
-
-		element.textContent = display.text;
-
-		if (display.hint !== undefined) {
-			element.title = display.hint;
-		}
-
-		if (display.unresolved) {
-			element.classList.add(
-				"file-pilot-reference-unresolved",
-			);
 		}
 
 		if (result.kind !== "found") {
@@ -119,85 +100,15 @@ export class FileReferenceReadingRenderer {
 					reference: raw,
 				});
 			}
-
-			return element;
 		}
 
-		// Keep a stable hover parent for this reference element.
-		const hoverParent: HoverParent = {
-			hoverPopover: null,
-		};
-
-		// Preview the associated Shadow Note on hover.
-		element.addEventListener("mouseover", (event: MouseEvent) => {
-			// Resolve again to avoid using stale records.
-			const current = this.references.resolveFileReference(raw);
-
-			if (current.kind !== "found") {
-				return;
-			}
-
-			const note = this.app.vault.getFileByPath(
-				current.record.shadowNotePath,
-			);
-
-			if (!note) {
-				return;
-			}
-
-			// Delegate the preview lifecycle to Obsidian.
-			this.app.workspace.trigger("hover-link", {
-				event,
-				source: FILE_REFERENCE_HOVER_SOURCE,
-				hoverParent,
-				targetEl: element,
-				linktext: note.path,
-				sourcePath: "",
-			});
+		return createFileReferenceElement({
+			app: this.app,
+			references: this.references,
+			executeAction: this.executeAction,
+			raw,
+			display,
 		});
-
-		const runAction = (action: FileItemOpenAction): void => {
-			// Resolve again to avoid operating on stale records.
-			const current = this.references.resolveFileReference(raw);
-
-			if (current.kind !== "found") {
-				return;
-			}
-
-			// Missing files only support opening their Shadow Notes.
-			if (
-				current.record.status === "missing" &&
-				action !== "openShadowNote"
-			) {
-				return;
-			}
-
-			void this.executeAction(action, current.record)
-				.catch((error: unknown) => {
-					notifyFileActionError(
-						error,
-						action,
-						current.record,
-					);
-				});
-		};
-
-		// Reuse existing file item mouse gestures.
-		for (const type of ["click", "dblclick", "auxclick"] as const) {
-			element.addEventListener(type, event => {
-				const action = resolveFileItemAction(event);
-
-				if (action === null || action === "editSummary") {
-					return;
-				}
-
-				event.preventDefault();
-				event.stopPropagation();
-
-				runAction(action);
-			});
-		}
-
-		return element;
 	}
+
 }

@@ -16,6 +16,9 @@ flowchart TD
     Main -->|"Register editor extension"| EditorExtension["FileReferenceEditorExtension"]
     ReadingRenderer -->|"Resolve references"| Reference
     EditorExtension -->|"Resolve references"| Reference
+    ReadingRenderer -->|"Create interactive element"| ReferenceElement["FileReferenceElement"]
+    EditorExtension -->|"Create interactive element"| ReferenceElement
+    ReferenceElement -->|"Resolve current record"| Reference
     ReadingRenderer -->|"Get display data"| ReferenceDisplay["FileReferenceDisplay"]
     EditorExtension -->|"Get display data"| ReferenceDisplay
     Sync -->|"Scan"| Scanner["FileScanner"]

@@ -109,6 +109,9 @@ export default class FilePilotPlugin extends Plugin {
 		this.registerEditorExtension(
 			createFileReferenceEditorExtension(
 				this.fileReferenceService,
+				this.app,
+				(action, record) =>
+					this.executeFileItemAction(action, record),
 			),
 		);
 

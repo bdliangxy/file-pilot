@@ -103,11 +103,31 @@ function setup(t, text, {
     });
     const service = new FileReferenceService();
     service.rebuildReferenceIndex(records);
-    const extension = createFileReferenceEditorExtension(service);
+    const actions = [];
+    const previewEvents = [];
+    const existingNotes = new Set(records.map(record => record.shadowNotePath));
+    let executeAction = async (action, record) => {
+        actions.push({ action, record });
+    };
+    const app = {
+        vault: {
+            getFileByPath: path => existingNotes.has(path) ? { path } : null,
+        },
+        workspace: {
+            trigger: (name, payload) => previewEvents.push({ name, payload }),
+        },
+    };
+    const extension = createFileReferenceEditorExtension(
+        service, app, (action, record) => executeAction(action, record),
+    );
     const state = makeState(text, { live, excluded, selections });
     const view = { state, visibleRanges };
     const plugin = extension.create(view);
-    return { plugin, extension, state, view, service };
+    return {
+        plugin, extension, state, view, service, actions, previewEvents,
+        existingNotes, app, window: dom.window,
+        setExecuteAction(callback) { executeAction = callback; },
+    };
 }
 
 function decorations(ctx) {
@@ -387,4 +407,127 @@ test('Source Mode has no selected widgets or atomic ranges', t => {
     const atomic = ctx.extension.provided[0];
     assert.equal(rendered(ctx).length, 0);
     assert.deepEqual(atomic.readRanges({ plugin: () => ctx.plugin }), []);
+});
+
+function widgetMouse(ctx, element, type, options = {}) {
+    const event = new ctx.window.MouseEvent(type, {
+        bubbles: true, cancelable: true, button: 0,
+        detail: type === 'dblclick' ? 2 : 1, ...options,
+    });
+    element.dispatchEvent(event);
+    return event;
+}
+
+async function flushWidgetActions() {
+    await new Promise(resolve => setImmediate(resolve));
+}
+
+test('Live Preview widget shares file gestures without intercepting ordinary clicks', async t => {
+    const ctx = setup(t, shortRef(ID_A));
+    const element = rendered(ctx)[0].dom;
+
+    assert.equal(widgetMouse(ctx, element, 'click').defaultPrevented, false);
+    assert.equal(widgetMouse(ctx, element, 'dblclick').defaultPrevented, true);
+    assert.equal(widgetMouse(ctx, element, 'click', { ctrlKey: true }).defaultPrevented, true);
+    assert.equal(widgetMouse(ctx, element, 'click', { altKey: true }).defaultPrevented, true);
+    await flushWidgetActions();
+
+    assert.deepEqual(ctx.actions.map(item => item.action), [
+        'openSource', 'openShadowNote', 'openContainingFolder',
+    ]);
+    assert.ok(ctx.actions.every(item => item.record.id === ID_A));
+});
+
+test('Live Preview hover previews the current Shadow Note with a stable hover parent', t => {
+    const record = makeFileRecord(ID_A, {
+        shadowNotePath: 'ShadowNotes/report.md',
+    });
+    const ctx = setup(t, shortRef(ID_A), { records: [record] });
+    const element = rendered(ctx)[0].dom;
+
+    widgetMouse(ctx, element, 'mouseover');
+    assert.equal(ctx.previewEvents.length, 1);
+    assert.equal(ctx.previewEvents[0].name, 'hover-link');
+    assert.equal(ctx.previewEvents[0].payload.source, 'file-pilot');
+    assert.equal(ctx.previewEvents[0].payload.targetEl, element);
+    assert.equal(ctx.previewEvents[0].payload.linktext, record.shadowNotePath);
+    const hoverParent = ctx.previewEvents[0].payload.hoverParent;
+    assert.equal(hoverParent.hoverPopover, null);
+
+    const updated = makeFileRecord(ID_A, {
+        shadowNotePath: 'ShadowNotes/renamed.md',
+    });
+    ctx.existingNotes.add(updated.shadowNotePath);
+    ctx.service.rebuildReferenceIndex([updated]);
+    widgetMouse(ctx, element, 'mouseover');
+    assert.equal(ctx.previewEvents[1].payload.linktext, updated.shadowNotePath);
+    assert.equal(ctx.previewEvents[1].payload.hoverParent, hoverParent);
+});
+
+test('Live Preview widget re-resolves records for actions and ignores deleted records', async t => {
+    const ctx = setup(t, shortRef(ID_A), {
+        records: [makeFileRecord(ID_A, { path: 'docs/old.pdf' })],
+    });
+    const element = rendered(ctx)[0].dom;
+    ctx.service.rebuildReferenceIndex([
+        makeFileRecord(ID_A, { path: 'docs/renamed.pdf' }),
+    ]);
+    widgetMouse(ctx, element, 'dblclick');
+    await flushWidgetActions();
+    assert.equal(ctx.actions[0].record.path, 'docs/renamed.pdf');
+
+    ctx.service.rebuildReferenceIndex([]);
+    widgetMouse(ctx, element, 'dblclick');
+    widgetMouse(ctx, element, 'mouseover');
+    await flushWidgetActions();
+    assert.equal(ctx.actions.length, 1);
+    assert.equal(ctx.previewEvents.length, 0);
+});
+
+test('Live Preview missing source supports only Shadow Note action and hover', async t => {
+    const record = makeFileRecord(ID_A, { status: 'missing' });
+    const ctx = setup(t, shortRef(ID_A), { records: [record] });
+    const element = rendered(ctx)[0].dom;
+
+    assert.equal(element.textContent, 'report.pdf (Missing)');
+    widgetMouse(ctx, element, 'dblclick');
+    widgetMouse(ctx, element, 'click', { altKey: true });
+    widgetMouse(ctx, element, 'click', { ctrlKey: true });
+    widgetMouse(ctx, element, 'mouseover');
+    await flushWidgetActions();
+
+    assert.deepEqual(ctx.actions.map(item => item.action), ['openShadowNote']);
+    assert.equal(ctx.previewEvents[0].payload.linktext, record.shadowNotePath);
+});
+
+test('Live Preview unresolved references never open files or preview Shadow Notes', async t => {
+    const ctx = setup(t, fullRef(ID_B), { records: [] });
+    const element = rendered(ctx)[0].dom;
+
+    assert.equal(element.classList.contains('file-pilot-reference-unresolved'), true);
+    widgetMouse(ctx, element, 'dblclick');
+    widgetMouse(ctx, element, 'click', { ctrlKey: true });
+    widgetMouse(ctx, element, 'mouseover');
+    await flushWidgetActions();
+
+    assert.deepEqual(ctx.actions, []);
+    assert.deepEqual(ctx.previewEvents, []);
+});
+
+test('Live Preview widget reports rejected file actions through the shared notifier', async t => {
+    const ctx = setup(t, shortRef(ID_A));
+    const previousError = console.error;
+    const messages = [];
+    const { Notice } = await import('../fakes/obsidian-settings.mjs');
+    const before = Notice.messages.length;
+    console.error = (...args) => messages.push(args);
+    ctx.setExecuteAction(async () => { throw new Error('simulated failure'); });
+    try {
+        widgetMouse(ctx, rendered(ctx)[0].dom, 'dblclick');
+        await flushWidgetActions();
+        assert.equal(messages.length, 1);
+        assert.equal(Notice.messages.length, before + 1);
+    } finally {
+        console.error = previousError;
+    }
 });
