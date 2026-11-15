@@ -4,6 +4,7 @@ import type {
 } from "../core/file-reference-service";
 import { getFullName } from "../utils/path-utils";
 import { t } from "../i18n";
+import path from "node:path";
 
 export interface FileReferenceDisplay {
 	text: string;
@@ -37,7 +38,7 @@ export function getFileReferenceDisplay(
 
 			const fileName = getFullName(result.record.path);
 			const displayName = result.record.kind === "folder"
-				? `${fileName}\\`
+				? `${fileName}${path.sep}`
 				: fileName;
 
 

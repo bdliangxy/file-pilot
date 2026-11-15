@@ -13,7 +13,6 @@ import {
 import type { FileRecord } from "../core/file-interface";
 import { FileReferenceService } from "../core/file-reference-service";
 import {
-	generateShortKey,
 	findFileReferenceMatches,
 } from "../utils/file-reference-utils";
 import { searchFileRecords } from "../utils/file-search-utils";
@@ -308,22 +307,12 @@ export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 			this.cancelInvalidPosition();
 			return;
 		}
-		// Resolve the latest FileRecord before insertion.
-		const current = this.references.resolveFileId(record.id);
+		// Generate a reference using the current FileRecord index.
+		const reference = this.references.formatFileReference(record.id);
 
-		if (!current) {
+		if (reference === null) {
 			return;
 		}
-
-		const key = generateShortKey(current.id);
-		const lookup = this.references.resolveShortKey(key);
-
-		// Fall back to the full ID if the short key is ambiguous.
-		const reference =
-			lookup.kind === "found" &&
-				lookup.record.id === current.id
-				? `|||@${key}|||`
-				: `|||!${current.id}|||`;
 
 		// Replace only the trigger and its search query.
 		context.editor.replaceRange(

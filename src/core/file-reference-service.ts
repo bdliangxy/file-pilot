@@ -109,5 +109,28 @@ export class FileReferenceService {
 	}
 
 
+	/**
+	 * Generate a file reference from a FileRecord ID.
+	 * Use a short key when unique; otherwise fall back to the full UUID.
+	 */
+	formatFileReference(id: string): string | null {
+		const record = this.resolveFileId(id);
+		if (!record) {
+			return null;
+		}
+
+		const key = generateShortKey(record.id);
+		const result = this.resolveShortKey(key);
+
+		if (
+			result.kind === "found" &&
+			result.record.id === record.id
+		) {
+			return `|||@${key}|||`;
+		}
+
+		return `|||!${record.id}|||`;
+	}
+
 }
 
