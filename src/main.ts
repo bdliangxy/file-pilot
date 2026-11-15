@@ -26,6 +26,7 @@ import {
 } from './ui/file-reference-editor-extension';
 import {
 	FileReferenceSuggest,
+	isInsideCode,
 } from './ui/file-reference-suggest';
 
 export default class FilePilotPlugin extends Plugin {
@@ -134,27 +135,31 @@ export default class FilePilotPlugin extends Plugin {
 				: "File reference",
 			icon: "file-search",
 
-			editorCallback: (editor, ctx) => {
+
+			editorCheckCallback: (checking, editor, ctx) => {
+				// Disable the command inside code blocks.
+				if (isInsideCode(editor, editor.getCursor())) {
+					return false;
+				}
+
+				// Check command availability without executing it.
+				if (checking) {
+					return true;
+				}
+
 				editor.replaceSelection("|||");
 
-				// Let the slash command popover close first.
 				window.requestAnimationFrame(() => {
-					const cursor = editor.getCursor();
-					const beforeCursor = editor
-						.getLine(cursor.line)
-						.slice(0, cursor.ch);
-
-					if (!beforeCursor.endsWith("|||")) {
-						return;
-					}
-
 					editor.focus();
 					fileReferenceSuggest.openFromCommand(
 						editor,
 						ctx.file,
 					);
 				});
+
+				return true;
 			},
+
 
 		});
 

@@ -21,9 +21,33 @@ import {
 	FileSortRule,
 } from "../utils/file-sort-utils";
 import { getFullName } from "../utils/path-utils";
+import { syntaxTree } from "@codemirror/language";
+import type { EditorView } from "@codemirror/view";
 
 const TRIGGER = "|||";
 const MAX_SUGGESTIONS = 15;
+
+export function isInsideCode(
+	editor: Editor,
+	cursor: EditorPosition,
+): boolean {
+	const cm = (editor as Editor & { cm?: EditorView }).cm;
+	if (!cm) return false;
+
+	const offset = editor.posToOffset(cursor);
+	const tree = syntaxTree(cm.state);
+	let node: ReturnType<typeof tree.resolveInner> | null =
+		tree.resolveInner(Math.max(0, offset - 1), -1);
+
+	while (node) {
+		if (node.name.toLowerCase().includes("code")) {
+			return true;
+		}
+		node = node.parent;
+	}
+
+	return false;
+}
 
 export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 	private commandEditor: Editor | null = null;
@@ -48,6 +72,14 @@ export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 		const triggerIndex = beforeCursor.lastIndexOf(TRIGGER);
 
 		if (triggerIndex === -1) {
+			if (this.commandEditor === editor) {
+				this.close();
+			}
+			return null;
+		}
+
+		// Disable suggestions inside code blocks.
+		if (isInsideCode(editor, cursor)) {
 			if (this.commandEditor === editor) {
 				this.close();
 			}

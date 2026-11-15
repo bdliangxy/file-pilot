@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createJiti } from 'jiti';
+// eslint-disable-next-line import/no-extraneous-dependencies -- Test-only syntax tree fixture.
+import { NodeType, Tree } from '@lezer/common';
 import { makeFileRecord, makeScannedFolder } from '../factories/file-record.mjs';
 import { FakeElement } from '../fakes/obsidian-view.mjs';
 
@@ -183,3 +185,37 @@ test('command-opened menu remains usable while editing its search query', () => 
     assert.equal(suggest.isOpen, true);
 });
 
+
+test('code context blocks manual file suggestions but ordinary text still works', () => {
+    const root = NodeType.define({ id: 0, name: 'Document', top: true });
+    const code = NodeType.define({ id: 1, name: 'FencedCode' });
+    const { suggest } = makeSuggest([]);
+    const editor = makeEditor('|||');
+    editor.posToOffset = (cursor) => cursor.ch;
+    const codeTree = new Tree(root, [new Tree(code, [], [], 3)], [0], 3);
+    editor.cm = { state: { field: () => ({ tree: codeTree }) } };
+
+    assert.equal(suggest.onTrigger(editor.getCursor(), editor, null), null);
+
+    // A text context with a syntax tree must continue to accept the trigger.
+    editor.cm.state.field = () => ({ tree: new Tree(root, [], [], 3) });
+    assert.equal(suggest.onTrigger(editor.getCursor(), editor, null).query, '');
+});
+
+test('a command-opened suggestion closes when syntax context becomes code', () => {
+    const root = NodeType.define({ id: 0, name: 'Document', top: true });
+    const code = NodeType.define({ id: 1, name: 'InlineCode' });
+    const { suggest } = makeSuggest([]);
+    const editor = makeEditor('|||');
+    editor.posToOffset = (cursor) => cursor.ch;
+    editor.cm = { state: { field: () => ({ tree: new Tree(root, [], [], 3) }) } };
+
+    suggest.openFromCommand(editor, null);
+    assert.equal(suggest.isOpen, true);
+
+    editor.cm.state.field = () => ({
+        tree: new Tree(root, [new Tree(code, [], [], 3)], [0], 3),
+    });
+    assert.equal(suggest.onTrigger(editor.getCursor(), editor, null), null);
+    assert.equal(suggest.isOpen, false);
+});

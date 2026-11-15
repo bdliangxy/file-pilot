@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createJiti } from 'jiti';
+// eslint-disable-next-line import/no-extraneous-dependencies -- Test-only syntax tree fixture.
+import { NodeType, Tree } from '@lezer/common';
 import { makeFileRecord } from '../factories/file-record.mjs';
 import { makePluginData } from '../factories/plugin-data.mjs';
 import { TFile } from '../fakes/obsidian-watcher.mjs';
@@ -245,73 +247,118 @@ test('failed data reset leaves previously indexed records available', async (t) 
 });
 
 
-test('registers FileReferenceSuggest and the editor insertion command', async (t) => {
+
+const CODE_ROOT = NodeType.define({ id: 0, name: 'Document', top: true });
+const CODE_NODE = NodeType.define({ id: 1, name: 'FencedCode' });
+
+function makeCommandEditor(initial = '', { insideCode = false } = {}) {
+    let value = initial;
+    let focused = false;
+    const editor = {
+        getCursor() { return { line: 0, ch: value.length }; },
+        getLine() { return value; },
+        posToOffset(cursor) { return cursor.ch; },
+        replaceSelection(insert) { value += insert; },
+        focus() { focused = true; },
+        get text() { return value; },
+        get focused() { return focused; },
+        setText(text) { value = text; },
+    };
+    if (insideCode) {
+        const tree = new Tree(CODE_ROOT, [
+            new Tree(CODE_NODE, [], [], value.length),
+        ], [0], value.length);
+        editor.cm = { state: { field: () => ({ tree }) } };
+    }
+    return editor;
+}
+
+function installAnimationFrame(t) {
+    const frames = [];
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        requestAnimationFrame(callback) {
+            frames.push(callback);
+            return frames.length;
+        },
+    };
+    t.after(() => {
+        if (originalWindow === undefined) delete globalThis.window;
+        else globalThis.window = originalWindow;
+    });
+    return frames;
+}
+
+test('registers FileReferenceSuggest and a conditional editor command', async (t) => {
     const { plugin } = await setup(t);
     assert.ok(plugin.editorSuggest);
     const command = plugin.registeredCommands?.find(item => item.id === 'insert-file-reference');
     assert.ok(command);
-    assert.equal(typeof command.editorCallback, 'function');
+    assert.equal(typeof command.editorCheckCallback, 'function');
+    assert.equal(command.editorCallback, undefined);
     assert.equal(command.name, 'File reference');
 });
 
-test('slash command inserts triple pipes and explicitly opens file suggestions', async (t) => {
+test('command availability checks do not modify text or open suggestions', async (t) => {
+    const { plugin } = await setup(t);
+    const command = plugin.registeredCommands.find(item => item.id === 'insert-file-reference');
+    const frames = installAnimationFrame(t);
+    const editor = makeCommandEditor('Before ');
+    const ctx = { file: new TFile('Notes/test.md') };
+
+    assert.equal(command.editorCheckCallback(true, editor, ctx), true);
+    assert.equal(editor.text, 'Before ');
+    assert.equal(frames.length, 0);
+    assert.equal(plugin.editorSuggest.triggerCalls.length, 0);
+});
+
+test('command is unavailable inside code and does not insert on execution', async (t) => {
+    const { plugin } = await setup(t);
+    const command = plugin.registeredCommands.find(item => item.id === 'insert-file-reference');
+    const frames = installAnimationFrame(t);
+    const editor = makeCommandEditor('code', { insideCode: true });
+    const ctx = { file: new TFile('Notes/test.md') };
+
+    assert.equal(command.editorCheckCallback(true, editor, ctx), false);
+    assert.equal(command.editorCheckCallback(false, editor, ctx), false);
+    assert.equal(editor.text, 'code');
+    assert.equal(frames.length, 0);
+    assert.equal(plugin.editorSuggest.triggerCalls.length, 0);
+});
+
+test('command inserts triple pipes and explicitly opens suggestions', async (t) => {
     const record = makeFileRecord(ID_A);
     const { plugin } = await setup(t, { records: [record] });
     const command = plugin.registeredCommands.find(item => item.id === 'insert-file-reference');
-    const pendingFrames = [];
-    const previousWindow = globalThis.window;
-    globalThis.window = {
-        requestAnimationFrame(callback) {
-            pendingFrames.push(callback);
-            return pendingFrames.length;
-        },
-    };
-    t.after(() => {
-        if (previousWindow === undefined) delete globalThis.window;
-        else globalThis.window = previousWindow;
-    });
+    const frames = installAnimationFrame(t);
+    const editor = makeCommandEditor('Before ');
+    const ctx = { file: new TFile('Notes/test.md') };
 
-    let text = 'Before ';
-    let focused = false;
-    const editor = {
-        replaceSelection(value) { text += value; },
-        getCursor() { return { line: 0, ch: text.length }; },
-        getLine() { return text; },
-        focus() { focused = true; },
-    };
-
-    command.editorCallback(editor, { file: new TFile('Notes/test.md') });
-    assert.equal(text, 'Before |||');
-    assert.equal(pendingFrames.length, 1);
+    assert.equal(command.editorCheckCallback(false, editor, ctx), true);
+    assert.equal(editor.text, 'Before |||');
+    assert.equal(frames.length, 1);
     assert.equal(plugin.editorSuggest.isOpen, false);
-    pendingFrames[0]();
-    assert.equal(focused, true);
+    frames[0]();
+    assert.equal(editor.focused, true);
     assert.equal(plugin.editorSuggest.isOpen, true);
     assert.equal(plugin.editorSuggest.triggerCalls[0].explicit, true);
     assert.deepEqual(plugin.editorSuggest.lastSuggestions.map(item => item.id), [ID_A]);
 });
 
-test('slash command does not open suggestions when trigger text changes before frame', async (t) => {
+test('invalid trigger at the next frame cannot open search results', async (t) => {
     const { plugin } = await setup(t);
     const command = plugin.registeredCommands.find(item => item.id === 'insert-file-reference');
-    const pendingFrames = [];
-    const previousWindow = globalThis.window;
-    globalThis.window = { requestAnimationFrame(callback) { pendingFrames.push(callback); } };
-    t.after(() => {
-        if (previousWindow === undefined) delete globalThis.window;
-        else globalThis.window = previousWindow;
-    });
+    const frames = installAnimationFrame(t);
+    const editor = makeCommandEditor('');
+    const ctx = { file: new TFile('Notes/test.md') };
 
-    let text = '';
-    const editor = {
-        replaceSelection(value) { text += value; },
-        getCursor() { return { line: 0, ch: text.length }; },
-        getLine() { return text; },
-        focus() { throw new Error('should not focus'); },
-    };
-    command.editorCallback(editor, { file: new TFile('Notes/test.md') });
-    text = '||';
-    pendingFrames[0]();
-    assert.equal(plugin.editorSuggest.triggerCalls.length, 0);
+    assert.equal(command.editorCheckCallback(false, editor, ctx), true);
+    assert.equal(frames.length, 1);
+
+    // Simulate another editor update between command execution and its frame.
+    editor.setText('||');
+    frames[0]();
+    assert.equal(editor.focused, true);
+    assert.equal(plugin.editorSuggest.triggerCalls.length, 1);
+    assert.equal(plugin.editorSuggest.isOpen, false);
 });
-
