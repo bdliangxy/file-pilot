@@ -26,6 +26,7 @@ import type { EditorView } from "@codemirror/view";
 
 const TRIGGER = "|||";
 const MAX_SUGGESTIONS = 15;
+const COMMAND_PENDING_TIMEOUT_MS = 2000;
 
 export function isInsideCode(
 	editor: Editor,
@@ -51,6 +52,15 @@ export function isInsideCode(
 
 export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 	private commandEditor: Editor | null = null;
+	private commandPending = false;
+	private commandRetryQueued = false;
+
+	//Identifies which request/generation the current command belongs to.
+	private commandGeneration = 0;
+
+	//Indicates whether the initial explicit trigger of openFromCommand() is currently being executed.
+	private commandStarting = false;
+	private commandTimeout: number | null = null;
 	constructor(
 		app: App,
 		private readonly references: FileReferenceService,
@@ -72,7 +82,7 @@ export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 		const triggerIndex = beforeCursor.lastIndexOf(TRIGGER);
 
 		if (triggerIndex === -1) {
-			if (this.commandEditor === editor) {
+			if (!this.commandPending && this.commandEditor === editor) {
 				this.close();
 			}
 			return null;
@@ -111,6 +121,38 @@ export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 			return null;
 		}
 
+		// Retry the explicit trigger if the command has not opened suggestions.
+		if (this.commandPending && !this.commandRetryQueued) {
+			this.commandRetryQueued = true;
+
+			// Associate the retry with the current command.
+			const generation = this.commandGeneration;
+
+			window.requestAnimationFrame(() => {
+				// Ignore callbacks belonging to an outdated command.
+				if (generation !== this.commandGeneration) return;
+
+				this.commandRetryQueued = false;
+
+				// The first trigger may already have succeeded.
+				if (!this.commandPending) return;
+
+				// Consume the pending request before retrying to prevent recursion.
+				this.commandPending = false;
+				this.commandEditor = editor;
+
+				const internal = this as unknown as {
+					trigger?: (
+						editor: Editor,
+						file: TFile | null,
+						explicit: boolean,
+					) => void;
+				};
+
+				internal.trigger?.(editor, _file, true);
+			});
+		}
+
 		return {
 			start: {
 				line: cursor.line,
@@ -124,6 +166,8 @@ export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 	getSuggestions(
 		context: EditorSuggestContext,
 	): FileRecord[] {
+		this.commandPending = false;
+		this.clearCommandTimeout();
 		const records = this.getRecords();
 		const query = context.query.trim();
 
@@ -220,12 +264,55 @@ export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 			) => void;
 		};
 
+
+		this.clearCommandTimeout();
+		this.commandGeneration++;
+		this.commandRetryQueued = false;
 		this.commandEditor = editor;
-		internal.trigger?.(editor, file, true);
+		this.commandPending = true;
+
+		this.commandStarting = true;
+
+		try {
+			internal.trigger?.(editor, file, true);
+		} finally {
+			this.commandStarting = false;
+		}
+
+		if (this.commandPending) {
+			const generation = this.commandGeneration;
+			this.commandTimeout = window.setTimeout(() => {
+				if (generation !== this.commandGeneration || !this.commandPending) return;
+
+				// Expire a command that never reached suggestions.
+				this.commandGeneration++;
+				this.commandPending = false;
+				this.commandRetryQueued = false;
+				this.commandEditor = null;
+				this.commandTimeout = null;
+			}, COMMAND_PENDING_TIMEOUT_MS);
+		}
+	}
+
+
+	private clearCommandTimeout(): void {
+		if (this.commandTimeout !== null) {
+			window.clearTimeout(this.commandTimeout);
+			this.commandTimeout = null;
+		}
 	}
 
 	override close(): void {
-		this.commandEditor = null;
+		if (!this.commandStarting) {
+			this.clearCommandTimeout();
+			// Invalidate pending retries when the command is closed.
+			this.commandGeneration++;
+			this.commandPending = false;
+			this.commandRetryQueued = false;
+			this.commandEditor = null;
+		}
+
 		super.close();
 	}
+
 }

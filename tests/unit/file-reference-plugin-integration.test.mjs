@@ -281,6 +281,9 @@ function installAnimationFrame(t) {
             frames.push(callback);
             return frames.length;
         },
+        // Keep the command timeout inert in integration tests.
+        setTimeout: () => 1,
+        clearTimeout() {},
     };
     t.after(() => {
         if (originalWindow === undefined) delete globalThis.window;

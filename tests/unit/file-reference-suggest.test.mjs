@@ -19,6 +19,13 @@ const { generateShortKey } = await jiti.import('../../src/utils/file-reference-u
 const ID_A = '550e8400-e29b-41d4-a716-446655440000';
 const ID_B = '6fa459ea-ee8a-3ca4-894e-db77e160355e';
 
+// Keep animation frames inert in tests that do not explicitly control scheduling.
+globalThis.window ??= {
+    requestAnimationFrame: () => 1,
+    setTimeout: () => 1,
+    clearTimeout() {},
+};
+
 function makeEditor(initial = '') {
     let line = initial;
     let cursor = { line: 0, ch: initial.length };
@@ -218,4 +225,188 @@ test('a command-opened suggestion closes when syntax context becomes code', () =
     });
     assert.equal(suggest.onTrigger(editor.getCursor(), editor, null), null);
     assert.equal(suggest.isOpen, false);
+});
+
+
+function withControlledFrames(callback) {
+    const previousWindow = globalThis.window;
+    const frames = [];
+    globalThis.window = {
+        ...previousWindow,
+        requestAnimationFrame(fn) {
+            frames.push(fn);
+            return frames.length;
+        },
+    };
+    try {
+        callback({
+            count: () => frames.length,
+            next: () => {
+                const fn = frames.shift();
+                assert.ok(fn, 'Expected a queued animation frame');
+                fn();
+            },
+        });
+    } finally {
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+    }
+}
+
+function createTableCommandHarness() {
+    const { suggest } = makeSuggest([makeFileRecord(ID_A)]);
+    const originalTrigger = suggest.trigger.bind(suggest);
+    const calls = [];
+    suggest.trigger = (editor, file, explicit) => {
+        calls.push({ editor, file, explicit });
+        if (editor.text === '|     |     |') {
+            assert.equal(suggest.onTrigger(editor.getCursor(), editor, file), null);
+            suggest.close();
+        } else {
+            originalTrigger(editor, file, explicit);
+        }
+    };
+    return { suggest, calls };
+}
+
+test('table command retries after the trigger becomes available in the editor', () => {
+    withControlledFrames(({ count, next }) => {
+        const { suggest, calls } = createTableCommandHarness();
+        const table = makeEditor('|     |     |');
+        const realEditor = makeEditor('|||');
+
+        suggest.openFromCommand(table, null);
+        assert.equal(suggest.isOpen, false);
+        assert.ok(suggest.onTrigger(realEditor.getCursor(), realEditor, null));
+        assert.equal(count(), 1);
+        next();
+
+        assert.equal(calls.length, 2);
+        assert.equal(calls[1].editor, realEditor);
+        assert.equal(calls[1].explicit, true);
+        assert.equal(suggest.isOpen, true);
+    });
+});
+
+test('closing a command before its queued retry prevents reopening', () => {
+    withControlledFrames(({ next }) => {
+        const { suggest, calls } = createTableCommandHarness();
+        const table = makeEditor('|     |     |');
+        const realEditor = makeEditor('|||');
+
+        suggest.openFromCommand(table, null);
+        assert.ok(suggest.onTrigger(realEditor.getCursor(), realEditor, null));
+        suggest.close();
+        next();
+
+        assert.equal(calls.length, 1, 'Canceled command must not trigger again');
+        assert.equal(suggest.isOpen, false);
+    });
+});
+
+test('an older queued retry must not override a newer pending command', () => {
+    withControlledFrames(({ count, next }) => {
+        const { suggest, calls } = createTableCommandHarness();
+        const oldTable = makeEditor('|     |     |');
+        const oldEditor = makeEditor('|||old');
+        const newTable = makeEditor('|     |     |');
+        const newEditor = makeEditor('|||new');
+
+        suggest.openFromCommand(oldTable, null);
+        assert.ok(suggest.onTrigger(oldEditor.getCursor(), oldEditor, null));
+        assert.equal(count(), 1);
+
+        suggest.openFromCommand(newTable, null);
+        assert.ok(suggest.onTrigger(newEditor.getCursor(), newEditor, null));
+        next();
+
+        assert.equal(
+            calls.some(call => call.editor === oldEditor),
+            false,
+            'A stale frame must not trigger on an editor from the previous command',
+        );
+    });
+});
+
+
+function withControlledTimeouts(run) {
+    const previousWindow = globalThis.window;
+    const tasks = new Map();
+    let nextId = 0;
+    globalThis.window = {
+        ...previousWindow,
+        setTimeout(callback, delay) {
+            const id = ++nextId;
+            tasks.set(id, { callback, delay });
+            return id;
+        },
+        clearTimeout(id) {
+            tasks.delete(id);
+        },
+    };
+    try {
+        run({
+            pending: () => [...tasks.values()],
+            expire: () => {
+                const [id, task] = tasks.entries().next().value ?? [];
+                assert.ok(task, 'Expected an active command timeout');
+                tasks.delete(id);
+                task.callback();
+            },
+        });
+    } finally {
+        globalThis.window = previousWindow;
+    }
+}
+
+test('unfinished table command expires after two seconds without a valid trigger', () => {
+    withControlledTimeouts(({ pending, expire }) => {
+        withControlledFrames(({ count, next }) => {
+            const { suggest, calls } = createTableCommandHarness();
+            const table = makeEditor('|     |     |');
+            const laterEditor = makeEditor('|||');
+
+            suggest.openFromCommand(table, null);
+            assert.equal(pending().length, 1);
+            assert.equal(pending()[0].delay, 2000);
+            expire();
+
+            assert.ok(suggest.onTrigger(laterEditor.getCursor(), laterEditor, null));
+            assert.equal(count(), 0, 'An expired command must not queue a retry');
+            assert.equal(calls.length, 1);
+            assert.equal(suggest.isOpen, false);
+        });
+    });
+});
+
+test('successful table retry cancels the pending-command timeout', () => {
+    withControlledTimeouts(({ pending }) => {
+        withControlledFrames(({ next }) => {
+            const { suggest } = createTableCommandHarness();
+            const table = makeEditor('|     |     |');
+            const realEditor = makeEditor('|||');
+
+            suggest.openFromCommand(table, null);
+            assert.equal(pending().length, 1);
+            assert.ok(suggest.onTrigger(realEditor.getCursor(), realEditor, null));
+            next();
+            assert.equal(suggest.isOpen, true);
+            assert.equal(pending().length, 0);
+        });
+    });
+});
+
+test('closing or replacing an unfinished command cancels its timeout', () => {
+    withControlledTimeouts(({ pending }) => {
+        const { suggest } = createTableCommandHarness();
+        const table = makeEditor('|     |     |');
+
+        suggest.openFromCommand(table, null);
+        assert.equal(pending().length, 1);
+        suggest.openFromCommand(table, null);
+        assert.equal(pending().length, 1, 'Starting a new command must cancel the older timeout');
+
+        suggest.close();
+        assert.equal(pending().length, 0, 'Closing a command must cancel the timeout');
+    });
 });
