@@ -34,12 +34,18 @@ export function getFileReferenceDisplay(
 			};
 
 		case "found": {
+
 			const fileName = getFullName(result.record.path);
+			const displayName = result.record.kind === "folder"
+				? `${fileName}\\`
+				: fileName;
+
 
 			return {
+
 				text: result.record.status === "missing"
-					? `${fileName} (${t("fileStatusMissing")})`
-					: fileName,
+					? `${displayName} (${t("fileStatusMissing")})`
+					: displayName,
 				unresolved: false,
 			};
 		}

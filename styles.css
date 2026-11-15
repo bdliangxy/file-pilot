@@ -683,3 +683,31 @@ body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explor
 .cm-content .file-pilot-reference.file-pilot-reference-selected {
 	background-color: var(--text-selection);
 }
+
+/* File reference suggestion items. */
+.file-pilot-suggestion {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 4px 2px;
+}
+
+.file-pilot-suggestion-name {
+	font-size: var(--font-ui-medium);
+	font-weight: 700;
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.file-pilot-suggestion-path {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.file-pilot-suggestion-status {
+	font-size: var(--font-smallest);
+	color: var(--text-warning);
+}

@@ -1,4 +1,4 @@
-import { Plugin } from 'obsidian';
+import { Plugin, getLanguage } from 'obsidian';
 import { shell } from 'electron';
 import { PluginStateService } from './data/plugin-state-service';
 import { logger } from './utils/logger';
@@ -24,6 +24,9 @@ import {
 import {
 	createFileReferenceEditorExtension,
 } from './ui/file-reference-editor-extension';
+import {
+	FileReferenceSuggest,
+} from './ui/file-reference-suggest';
 
 export default class FilePilotPlugin extends Plugin {
 	//the state service owns and persists all plugin data.
@@ -114,6 +117,48 @@ export default class FilePilotPlugin extends Plugin {
 					this.executeFileItemAction(action, record),
 			),
 		);
+
+		const fileReferenceSuggest = new FileReferenceSuggest(
+			this.app,
+			this.fileReferenceService,
+			() => this.stateService.getFileRecords(),
+		);
+
+		this.registerEditorSuggest(fileReferenceSuggest);
+
+		// Register the file reference insertion command.
+		this.addCommand({
+			id: "insert-file-reference",
+			name: getLanguage().startsWith("zh")
+				? "文件引用"
+				: "File reference",
+			icon: "file-search",
+
+			editorCallback: (editor, ctx) => {
+				editor.replaceSelection("|||");
+
+				// Let the slash command popover close first.
+				window.requestAnimationFrame(() => {
+					const cursor = editor.getCursor();
+					const beforeCursor = editor
+						.getLine(cursor.line)
+						.slice(0, cursor.ch);
+
+					if (!beforeCursor.endsWith("|||")) {
+						return;
+					}
+
+					editor.focus();
+					fileReferenceSuggest.openFromCommand(
+						editor,
+						ctx.file,
+					);
+				});
+			},
+
+		});
+
+
 
 		// Add the ribbon icon.
 		this.addRibbonIcon(

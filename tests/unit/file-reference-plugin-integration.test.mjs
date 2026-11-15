@@ -243,3 +243,75 @@ test('failed data reset leaves previously indexed records available', async (t) 
     assert.equal(lookup(plugin, ID_A).kind, 'found');
     assert.equal(plugin.stateService.isClearingData, false);
 });
+
+
+test('registers FileReferenceSuggest and the editor insertion command', async (t) => {
+    const { plugin } = await setup(t);
+    assert.ok(plugin.editorSuggest);
+    const command = plugin.registeredCommands?.find(item => item.id === 'insert-file-reference');
+    assert.ok(command);
+    assert.equal(typeof command.editorCallback, 'function');
+    assert.equal(command.name, 'File reference');
+});
+
+test('slash command inserts triple pipes and explicitly opens file suggestions', async (t) => {
+    const record = makeFileRecord(ID_A);
+    const { plugin } = await setup(t, { records: [record] });
+    const command = plugin.registeredCommands.find(item => item.id === 'insert-file-reference');
+    const pendingFrames = [];
+    const previousWindow = globalThis.window;
+    globalThis.window = {
+        requestAnimationFrame(callback) {
+            pendingFrames.push(callback);
+            return pendingFrames.length;
+        },
+    };
+    t.after(() => {
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+    });
+
+    let text = 'Before ';
+    let focused = false;
+    const editor = {
+        replaceSelection(value) { text += value; },
+        getCursor() { return { line: 0, ch: text.length }; },
+        getLine() { return text; },
+        focus() { focused = true; },
+    };
+
+    command.editorCallback(editor, { file: new TFile('Notes/test.md') });
+    assert.equal(text, 'Before |||');
+    assert.equal(pendingFrames.length, 1);
+    assert.equal(plugin.editorSuggest.isOpen, false);
+    pendingFrames[0]();
+    assert.equal(focused, true);
+    assert.equal(plugin.editorSuggest.isOpen, true);
+    assert.equal(plugin.editorSuggest.triggerCalls[0].explicit, true);
+    assert.deepEqual(plugin.editorSuggest.lastSuggestions.map(item => item.id), [ID_A]);
+});
+
+test('slash command does not open suggestions when trigger text changes before frame', async (t) => {
+    const { plugin } = await setup(t);
+    const command = plugin.registeredCommands.find(item => item.id === 'insert-file-reference');
+    const pendingFrames = [];
+    const previousWindow = globalThis.window;
+    globalThis.window = { requestAnimationFrame(callback) { pendingFrames.push(callback); } };
+    t.after(() => {
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+    });
+
+    let text = '';
+    const editor = {
+        replaceSelection(value) { text += value; },
+        getCursor() { return { line: 0, ch: text.length }; },
+        getLine() { return text; },
+        focus() { throw new Error('should not focus'); },
+    };
+    command.editorCallback(editor, { file: new TFile('Notes/test.md') });
+    text = '||';
+    pendingFrames[0]();
+    assert.equal(plugin.editorSuggest.triggerCalls.length, 0);
+});
+

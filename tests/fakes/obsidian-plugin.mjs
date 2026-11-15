@@ -65,5 +65,45 @@ export class Plugin {
         this.hoverLinkSource = { id, info };
     }
 
+    registerEditorSuggest(suggest) {
+        this.editorSuggest = suggest;
+    }
+
+    addCommand(command) {
+        this.registeredCommands ??= [];
+        this.registeredCommands.push(command);
+    }
+
     addRibbonIcon() {}
+}
+
+export class EditorSuggest {
+    constructor(app) {
+        this.app = app;
+        this.context = null;
+        this.limit = 100;
+        this.isOpen = false;
+        this.triggerCalls = [];
+    }
+
+    trigger(editor, file, explicit) {
+        this.triggerCalls.push({ editor, file, explicit });
+        const info = this.onTrigger(editor.getCursor(), editor, file);
+        if (info === null) {
+            this.close();
+            return;
+        }
+        this.context = { ...info, editor, file };
+        this.lastSuggestions = this.getSuggestions(this.context);
+        this.isOpen = true;
+    }
+
+    open() {
+        this.isOpen = true;
+    }
+
+    close() {
+        this.isOpen = false;
+        this.context = null;
+    }
 }
