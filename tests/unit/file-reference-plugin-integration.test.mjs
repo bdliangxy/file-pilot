@@ -365,3 +365,64 @@ test('invalid trigger at the next frame cannot open search results', async (t) =
     assert.equal(plugin.editorSuggest.triggerCalls.length, 1);
     assert.equal(plugin.editorSuggest.isOpen, false);
 });
+
+function makeMultilineCommandEditor(initial) {
+    let value = initial;
+    let line = value.split('\n').length - 1;
+    let ch = value.split('\n').at(-1).length;
+    let focused = false;
+
+    return {
+        getCursor: () => ({ line, ch }),
+        getLine: (index) => value.split('\n')[index],
+        lineCount: () => value.split('\n').length,
+        replaceSelection(insert) {
+            const lines = value.split('\n');
+            const prefix = lines.slice(0, line).join('\n');
+            const offset = (line === 0 ? 0 : prefix.length + 1) + ch;
+            const afterInsertion = value.slice(0, offset) + insert;
+            value = afterInsertion + value.slice(offset);
+            line = afterInsertion.split('\n').length - 1;
+            ch = afterInsertion.split('\n').at(-1).length;
+        },
+        focus() { focused = true; },
+        get text() { return value; },
+        get focused() { return focused; },
+    };
+}
+
+test('command inserts a separating blank line directly below a Markdown table', async (t) => {
+    const record = makeFileRecord(ID_A);
+    const { plugin } = await setup(t, { records: [record] });
+    const command = plugin.registeredCommands.find(item => item.id === 'insert-file-reference');
+    const frames = installAnimationFrame(t);
+    const editor = makeMultilineCommandEditor('| A | B |\n|---|---|\n| X | Y |\n');
+    const ctx = { file: new TFile('Notes/test.md') };
+
+    assert.equal(command.editorCheckCallback(false, editor, ctx), true);
+    assert.equal(editor.text, '| A | B |\n|---|---|\n| X | Y |\n\n|||');
+    assert.equal(frames.length, 1);
+    frames.shift()();
+    assert.equal(plugin.editorSuggest.isOpen, true);
+    assert.deepEqual(plugin.editorSuggest.lastSuggestions.map(item => item.id), [ID_A]);
+});
+
+test('command does not add another blank line when already separated from a table', async (t) => {
+    const { plugin } = await setup(t);
+    const command = plugin.registeredCommands.find(item => item.id === 'insert-file-reference');
+    installAnimationFrame(t);
+    const editor = makeMultilineCommandEditor('| A | B |\n|---|---|\n| X | Y |\n\n');
+
+    assert.equal(command.editorCheckCallback(false, editor, { file: null }), true);
+    assert.equal(editor.text, '| A | B |\n|---|---|\n| X | Y |\n\n|||');
+});
+
+test('command inside a table cell does not insert a separating blank line', async (t) => {
+    const { plugin } = await setup(t);
+    const command = plugin.registeredCommands.find(item => item.id === 'insert-file-reference');
+    installAnimationFrame(t);
+    const editor = makeMultilineCommandEditor('| A | B |\n|---|---|\n| X | Y |');
+
+    assert.equal(command.editorCheckCallback(false, editor, { file: null }), true);
+    assert.equal(editor.text, '| A | B |\n|---|---|\n| X | Y ||||');
+});

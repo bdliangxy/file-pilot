@@ -1,6 +1,7 @@
 
 import {
 	EditorSuggest,
+	Notice,
 	type App,
 	type Editor,
 	type EditorPosition,
@@ -23,6 +24,7 @@ import {
 import { getFullName } from "../utils/path-utils";
 import { syntaxTree } from "@codemirror/language";
 import type { EditorView } from "@codemirror/view";
+import { t } from '../i18n';
 
 const TRIGGER = "|||";
 const MAX_SUGGESTIONS = 15;
@@ -50,10 +52,61 @@ export function isInsideCode(
 	return false;
 }
 
+export function isDirectlyBelowTable(editor: Editor): boolean {
+	const cursor = editor.getCursor();
+
+	if (
+		cursor.line === 0 ||
+		editor.getLine(cursor.line).trim() !== ""
+	) {
+		return false;
+	}
+
+	const previousLine = editor.getLine(cursor.line - 1).trim();
+
+	return (
+		previousLine.startsWith("|") &&
+		previousLine.endsWith("|")
+	);
+}
+
+
+function isInsertionPositionValid(
+	editor: Editor,
+	start: EditorPosition,
+	end: EditorPosition,
+	query: string,
+): boolean {
+	const cursor = editor.getCursor();
+
+	if (
+		cursor.line !== end.line ||
+		cursor.ch !== end.ch ||
+		start.line !== end.line ||
+		end.line >= editor.lineCount()
+	) {
+		return false;
+	}
+
+	const text = editor.getLine(end.line)
+		.slice(start.ch, end.ch);
+
+	return text === `${TRIGGER}${query}`;
+}
+
+
 export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 	private commandEditor: Editor | null = null;
 	private commandPending = false;
 	private commandRetryQueued = false;
+
+
+	private cancelInvalidPosition(): void {
+		this.commandPending = false;
+		this.close();
+		new Notice(t('fileReferenceCursorMoved'));
+	}
+
 
 	//Identifies which request/generation the current command belongs to.
 	private commandGeneration = 0;
@@ -137,6 +190,17 @@ export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 				// The first trigger may already have succeeded.
 				if (!this.commandPending) return;
 
+				// Cancel if the insertion position changed before retrying.
+				if (!isInsertionPositionValid(
+					editor,
+					{ line: cursor.line, ch: triggerIndex },
+					cursor,
+					query,
+				)) {
+					this.cancelInvalidPosition();
+					return;
+				}
+
 				// Consume the pending request before retrying to prevent recursion.
 				this.commandPending = false;
 				this.commandEditor = editor;
@@ -168,6 +232,21 @@ export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 	): FileRecord[] {
 		this.commandPending = false;
 		this.clearCommandTimeout();
+
+		window.requestAnimationFrame(() => {
+			// Ignore an outdated suggestion context.
+			if (this.context !== context) return;
+
+			if (!isInsertionPositionValid(
+				context.editor,
+				context.start,
+				context.end,
+				context.query,
+			)) {
+				this.cancelInvalidPosition();
+			}
+		});
+
 		const records = this.getRecords();
 		const query = context.query.trim();
 
@@ -220,10 +299,15 @@ export class FileReferenceSuggest extends EditorSuggest<FileRecord> {
 	): void {
 		const context = this.context;
 
-		if (!context) {
+		if (!context || !isInsertionPositionValid(
+			context.editor,
+			context.start,
+			context.end,
+			context.query,
+		)) {
+			this.cancelInvalidPosition();
 			return;
 		}
-
 		// Resolve the latest FileRecord before insertion.
 		const current = this.references.resolveFileId(record.id);
 

@@ -27,6 +27,7 @@ import {
 import {
 	FileReferenceSuggest,
 	isInsideCode,
+	isDirectlyBelowTable,
 } from './ui/file-reference-suggest';
 
 export default class FilePilotPlugin extends Plugin {
@@ -128,13 +129,13 @@ export default class FilePilotPlugin extends Plugin {
 		this.registerEditorSuggest(fileReferenceSuggest);
 
 		// Register the file reference insertion command.
+
 		this.addCommand({
 			id: "insert-file-reference",
 			name: getLanguage().startsWith("zh")
 				? "文件引用"
 				: "File reference",
 			icon: "file-search",
-
 
 			editorCheckCallback: (checking, editor, ctx) => {
 				// Disable the command inside code blocks.
@@ -147,8 +148,14 @@ export default class FilePilotPlugin extends Plugin {
 					return true;
 				}
 
-				editor.replaceSelection("|||");
+				// Insert a blank line when directly below a Markdown table.
+				const insertText = isDirectlyBelowTable(editor)
+					? "\n|||"
+					: "|||";
 
+				editor.replaceSelection(insertText);
+
+				// Open suggestions after the slash command popover closes.
 				window.requestAnimationFrame(() => {
 					editor.focus();
 					fileReferenceSuggest.openFromCommand(
@@ -159,10 +166,7 @@ export default class FilePilotPlugin extends Plugin {
 
 				return true;
 			},
-
-
 		});
-
 
 
 		// Add the ribbon icon.

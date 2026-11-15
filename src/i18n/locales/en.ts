@@ -106,4 +106,5 @@ export const en = {
 	fileReferenceNotFoundHint: 'No managed file matches this reference.',
 	fileReferenceAmbiguous: 'Ambiguous file reference',
 	fileReferenceAmbiguousHint: 'Multiple managed files share this reference key.',
+	fileReferenceCursorMoved: 'The file reference insertion position changed. Please try again',
 } as const;

@@ -105,4 +105,5 @@ export const zh = {
 	fileReferenceNotFoundHint: '没有与此引用匹配的受管理文件。',
 	fileReferenceAmbiguous: '文件引用存在歧义',
 	fileReferenceAmbiguousHint: '多个受管理文件具有相同的引用短 Key。',
+	fileReferenceCursorMoved: '文件引用插入位置被移动，请重新尝试',
 } satisfies Record<keyof typeof en, string>;

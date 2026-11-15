@@ -6,6 +6,7 @@ import { createJiti } from 'jiti';
 import { NodeType, Tree } from '@lezer/common';
 import { makeFileRecord, makeScannedFolder } from '../factories/file-record.mjs';
 import { FakeElement } from '../fakes/obsidian-view.mjs';
+import { Notice } from '../fakes/obsidian-settings.mjs';
 
 const jiti = createJiti(import.meta.url, {
     alias: {
@@ -32,6 +33,7 @@ function makeEditor(initial = '') {
     const replacements = [];
     return {
         getLine: () => line,
+        lineCount: () => 1,
         getCursor: () => cursor,
         getSelection: () => '',
         focus() { this.focused = true; },
@@ -46,6 +48,9 @@ function makeEditor(initial = '') {
         setText(text) {
             line = text;
             cursor = { line: 0, ch: text.length };
+        },
+        setCursor(ch) {
+            cursor = { line: 0, ch };
         },
         get text() { return line; },
         replacements,
@@ -408,5 +413,106 @@ test('closing or replacing an unfinished command cancels its timeout', () => {
 
         suggest.close();
         assert.equal(pending().length, 0, 'Closing a command must cancel the timeout');
+    });
+});
+
+test('table boundary detection only matches an empty line directly after a pipe-delimited row', async () => {
+    const { isDirectlyBelowTable } = await jiti.import('../../src/ui/file-reference-suggest.ts');
+    const makeLines = (lines, line) => ({
+        getCursor: () => ({ line, ch: 0 }),
+        getLine: (index) => lines[index],
+    });
+
+    assert.equal(isDirectlyBelowTable(makeLines(['| A | B |', ''], 1)), true);
+    assert.equal(isDirectlyBelowTable(makeLines(['  | A | B |  ', '   '], 1)), true);
+    assert.equal(isDirectlyBelowTable(makeLines(['| A | B |', '', ''], 2)), false);
+    assert.equal(isDirectlyBelowTable(makeLines(['| A | B |', 'text'], 1)), false);
+    assert.equal(isDirectlyBelowTable(makeLines(['A | B', ''], 1)), false);
+    assert.equal(isDirectlyBelowTable(makeLines([''], 0)), false);
+});
+
+test('selection cancels without writing when its trigger text changes', () => {
+    const record = makeFileRecord(ID_A);
+    const { suggest } = makeSuggest([record]);
+    const editor = makeEditor('|||');
+    const originalNotices = Notice.messages.length;
+
+    openSearch(suggest, editor);
+    editor.setText('|  ');
+    suggest.selectSuggestion(record, {});
+
+    assert.equal(editor.text, '|  ');
+    assert.equal(editor.replacements.length, 0);
+    assert.equal(suggest.isOpen, false);
+    assert.equal(suggest.context, null);
+    assert.equal(Notice.messages.length, originalNotices + 1);
+});
+
+test('selection cancels without writing when cursor leaves the insertion position', () => {
+    const record = makeFileRecord(ID_A);
+    const { suggest } = makeSuggest([record]);
+    const editor = makeEditor('|||');
+    const originalNotices = Notice.messages.length;
+
+    openSearch(suggest, editor);
+    editor.setCursor(0);
+    suggest.selectSuggestion(record, {});
+
+    assert.equal(editor.text, '|||');
+    assert.equal(editor.replacements.length, 0);
+    assert.equal(suggest.isOpen, false);
+    assert.equal(Notice.messages.length, originalNotices + 1);
+});
+
+test('a queued table retry cancels when the original trigger position changes', () => {
+    withControlledFrames(({ next }) => {
+        const { suggest, calls } = createTableCommandHarness();
+        const table = makeEditor('|     |     |');
+        const realEditor = makeEditor('|||');
+        const originalNotices = Notice.messages.length;
+
+        suggest.openFromCommand(table, null);
+        assert.ok(suggest.onTrigger(realEditor.getCursor(), realEditor, null));
+        realEditor.setText('|  ');
+        next();
+
+        assert.equal(calls.length, 1, 'Invalid positions must not trigger a retry');
+        assert.equal(suggest.isOpen, false);
+        assert.equal(Notice.messages.length, originalNotices + 1);
+    });
+});
+
+test('a deferred suggestion check cancels when the editor content changes', () => {
+    withControlledFrames(({ next }) => {
+        const record = makeFileRecord(ID_A);
+        const { suggest } = makeSuggest([record]);
+        const editor = makeEditor('|||');
+        const originalNotices = Notice.messages.length;
+        const context = openSearch(suggest, editor);
+
+        suggest.getSuggestions(context);
+        editor.setText('|  ');
+        next();
+
+        assert.equal(suggest.context, null);
+        assert.equal(suggest.isOpen, false);
+        assert.equal(Notice.messages.length, originalNotices + 1);
+    });
+});
+
+test('a deferred suggestion check ignores an obsolete context', () => {
+    withControlledFrames(({ next }) => {
+        const record = makeFileRecord(ID_A);
+        const { suggest } = makeSuggest([record]);
+        const editor = makeEditor('|||');
+        const originalNotices = Notice.messages.length;
+        const context = openSearch(suggest, editor);
+
+        suggest.getSuggestions(context);
+        suggest.context = { ...context };
+        editor.setText('|  ');
+        next();
+
+        assert.equal(Notice.messages.length, originalNotices);
     });
 });
