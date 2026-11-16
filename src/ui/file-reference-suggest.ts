@@ -24,10 +24,14 @@ import { getFullName } from "../utils/path-utils";
 import { syntaxTree } from "@codemirror/language";
 import type { EditorView } from "@codemirror/view";
 import { t } from '../i18n';
+import {
+	isFilePilotTreeBodyLine,
+} from "../utils/file-pilot-tree-fence";
 
 const TRIGGER = "|||";
 const MAX_SUGGESTIONS = 15;
 const COMMAND_PENDING_TIMEOUT_MS = 2000;
+
 
 export function isInsideCode(
 	editor: Editor,
@@ -38,18 +42,25 @@ export function isInsideCode(
 
 	const offset = editor.posToOffset(cursor);
 	const tree = syntaxTree(cm.state);
+
 	let node: ReturnType<typeof tree.resolveInner> | null =
 		tree.resolveInner(Math.max(0, offset - 1), -1);
 
 	while (node) {
 		if (node.name.toLowerCase().includes("code")) {
-			return true;
+			// Allow searches inside File Pilot tree fence bodies.
+			return !isFilePilotTreeBodyLine(
+				cursor.line,
+				index => editor.getLine(index),
+			);
 		}
+
 		node = node.parent;
 	}
 
 	return false;
 }
+
 
 export function isDirectlyBelowTable(editor: Editor): boolean {
 	const cursor = editor.getCursor();

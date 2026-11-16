@@ -516,3 +516,118 @@ test('a deferred suggestion check ignores an obsolete context', () => {
         assert.equal(Notice.messages.length, originalNotices);
     });
 });
+
+
+function makeFencedSuggestEditor(text, cursorLine) {
+    const lines = text.split('\n');
+    let cursor = { line: cursorLine, ch: lines[cursorLine].length };
+    const root = NodeType.define({ id: 0, name: 'Document', top: true });
+    const code = NodeType.define({ id: 1, name: 'FencedCode' });
+    const children = [];
+    const positions = [];
+    let offset = 0;
+    let fenceStart = null;
+    let fenceMarker = null;
+
+    // Model only fenced-code spans, leaving ordinary Markdown outside them.
+    for (const line of lines) {
+        const marker = /^(`{3,}|~{3,})/.exec(line)?.[1];
+        if (fenceStart === null && marker) {
+            fenceStart = offset;
+            fenceMarker = marker;
+        } else if (
+            fenceStart !== null &&
+            marker &&
+            marker[0] === fenceMarker[0] &&
+            marker.length >= fenceMarker.length &&
+            /^(`{3,}|~{3,})[ \t]*$/.test(line)
+        ) {
+            const end = offset + line.length;
+            children.push(new Tree(code, [], [], end - fenceStart));
+            positions.push(fenceStart);
+            fenceStart = null;
+            fenceMarker = null;
+        }
+        offset += line.length + 1;
+    }
+    if (fenceStart !== null) {
+        children.push(new Tree(code, [], [], text.length - fenceStart));
+        positions.push(fenceStart);
+    }
+
+    const tree = new Tree(root, children, positions, text.length);
+
+    return {
+        getLine: line => lines[line],
+        lineCount: () => lines.length,
+        getCursor: () => cursor,
+        posToOffset: position =>
+            lines.slice(0, position.line).reduce((sum, line) => sum + line.length + 1, 0)
+            + position.ch,
+        replaceRange(insert, start, end) {
+            assert.equal(start.line, end.line);
+            const line = lines[start.line];
+            lines[start.line] = line.slice(0, start.ch) + insert + line.slice(end.ch);
+            cursor = { line: start.line, ch: start.ch + insert.length };
+        },
+        get text() { return lines.join('\n'); },
+        cm: { state: { field: () => ({ tree }) } },
+    };
+}
+
+test('triple-pipe suggestions open and insert references inside a tree fence', () => {
+    const record = makeFileRecord(ID_A, { path: 'docs/report.pdf' });
+    const { suggest } = makeSuggest([record]);
+    const editor = makeFencedSuggestEditor([
+        '```file-pilot-tree',
+        'Project/',
+        '├── |||report',
+        '```',
+    ].join('\n'), 2);
+
+    const context = openSearch(suggest, editor);
+    assert.equal(context.query, 'report');
+    assert.equal(context.start.ch, '├── '.length);
+    assert.deepEqual(suggest.getSuggestions(context).map(item => item.id), [ID_A]);
+
+    suggest.selectSuggestion(record, {});
+    assert.equal(
+        editor.getLine(2),
+        '├── |||@' + generateShortKey(ID_A) + '|||',
+    );
+    assert.equal(editor.getLine(1), 'Project/');
+    assert.equal(editor.getLine(3), '```');
+});
+
+test('triple-pipe suggestions stay blocked in ordinary fenced code', () => {
+    const { suggest } = makeSuggest([]);
+    const editor = makeFencedSuggestEditor([
+        '```typescript',
+        '├── |||report',
+        '```',
+    ].join('\n'), 1);
+
+    assert.equal(suggest.onTrigger(editor.getCursor(), editor, null), null);
+});
+
+test('suggestions work in tilde tree fences but not in a closed tree fence', () => {
+    const { suggest } = makeSuggest([]);
+    const text = [
+        '~~~file-pilot-tree',
+        '├── |||first',
+        '~~~',
+        '```javascript',
+        '|||second',
+        '```',
+        '|||outside',
+    ].join('\n');
+
+    const inside = makeFencedSuggestEditor(text, 1);
+    assert.equal(suggest.onTrigger(inside.getCursor(), inside, null).query, 'first');
+
+    const blocked = makeFencedSuggestEditor(text, 4);
+    assert.equal(suggest.onTrigger(blocked.getCursor(), blocked, null), null);
+
+    const outside = makeFencedSuggestEditor(text, 6);
+    assert.equal(suggest.onTrigger(outside.getCursor(), outside, null).query, 'outside');
+});

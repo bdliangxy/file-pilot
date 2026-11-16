@@ -426,3 +426,66 @@ test('command inside a table cell does not insert a separating blank line', asyn
     assert.equal(command.editorCheckCallback(false, editor, { file: null }), true);
     assert.equal(editor.text, '| A | B |\n|---|---|\n| X | Y ||||');
 });
+
+
+function attachCodeContext(editor) {
+    editor.posToOffset = position =>
+        editor.text.split('\n').slice(0, position.line)
+            .reduce((sum, line) => sum + line.length + 1, 0) + position.ch;
+    editor.cm = {
+        state: {
+            field: () => {
+                const length = editor.text.length;
+                return {
+                    tree: new Tree(CODE_ROOT, [
+                        new Tree(CODE_NODE, [], [], length),
+                    ], [0], length),
+                };
+            },
+        },
+    };
+    return editor;
+}
+
+test('file reference command opens suggestions inside a File Pilot tree fence', async t => {
+    const record = makeFileRecord(ID_A, { path: 'docs/report.pdf' });
+    const { plugin } = await setup(t, { records: [record] });
+    const command = plugin.registeredCommands.find(
+        item => item.id === 'insert-file-reference',
+    );
+    const frames = installAnimationFrame(t);
+    const editor = attachCodeContext(makeMultilineCommandEditor([
+        '```file-pilot-tree',
+        '├── ',
+    ].join('\n')));
+    const ctx = { file: new TFile('Notes/test.md') };
+
+    assert.equal(command.editorCheckCallback(true, editor, ctx), true);
+    assert.equal(editor.text, '```file-pilot-tree\n├── ');
+    assert.equal(command.editorCheckCallback(false, editor, ctx), true);
+    assert.equal(editor.text, '```file-pilot-tree\n├── |||');
+    assert.equal(frames.length, 1);
+
+    frames[0]();
+    assert.equal(plugin.editorSuggest.isOpen, true);
+    assert.deepEqual(plugin.editorSuggest.lastSuggestions.map(item => item.id), [ID_A]);
+});
+
+test('file reference command remains disabled inside ordinary code fences', async t => {
+    const { plugin } = await setup(t);
+    const command = plugin.registeredCommands.find(
+        item => item.id === 'insert-file-reference',
+    );
+    const frames = installAnimationFrame(t);
+    const editor = attachCodeContext(makeMultilineCommandEditor([
+        '```typescript',
+        '├── ',
+    ].join('\n')));
+    const ctx = { file: new TFile('Notes/test.md') };
+
+    assert.equal(command.editorCheckCallback(true, editor, ctx), false);
+    assert.equal(command.editorCheckCallback(false, editor, ctx), false);
+    assert.equal(editor.text, '```typescript\n├── ');
+    assert.equal(frames.length, 0);
+    assert.equal(plugin.editorSuggest.triggerCalls.length, 0);
+});
