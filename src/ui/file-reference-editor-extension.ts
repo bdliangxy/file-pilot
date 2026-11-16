@@ -31,6 +31,95 @@ import {
 // Signal that the FileRecord reference index has changed.
 const refreshFileReferences = StateEffect.define<void>();
 
+interface TreeFence {
+	marker: string;
+	isTree: boolean;
+}
+
+// Cache tree body lines by immutable CodeMirror document.
+const treeFenceCache = new WeakMap<object, ReadonlySet<number>>();
+
+function getTreeFenceBodyLines(
+	state: EditorState,
+): ReadonlySet<number> {
+	const doc = state.doc;
+	const cached = treeFenceCache.get(doc);
+
+	if (cached !== undefined) {
+		return cached;
+	}
+
+	const bodyLines = new Set<number>();
+	let fence: TreeFence | null = null;
+	const lineCount = doc.lineAt(doc.length).number;
+
+	for (let number = 1; number <= lineCount; number++) {
+		const text = doc.line(number).text;
+
+		if (fence !== null) {
+			const closing =
+				/^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(text);
+
+			const marker = closing?.[1];
+
+			if (
+				marker !== undefined &&
+				marker[0] === fence.marker[0] &&
+				marker.length >= fence.marker.length
+			) {
+				fence = null;
+				continue;
+			}
+
+			if (fence.isTree) {
+				bodyLines.add(number);
+			}
+
+			continue;
+		}
+
+		const opening =
+			/^ {0,3}(`{3,}|~{3,})(.*)$/.exec(text);
+
+		const marker = opening?.[1];
+
+		if (marker === undefined) {
+			continue;
+		}
+
+		const info = opening?.[2] ?? "";
+
+		// Backtick fences cannot contain backticks in the info string.
+		if (marker[0] === "`" && info.includes("`")) {
+			continue;
+		}
+
+		const language = info.trim().split(/\s+/)[0];
+
+		fence = {
+			marker,
+			isTree: language === "file-pilot-tree",
+		};
+	}
+
+	treeFenceCache.set(doc, bodyLines);
+	return bodyLines;
+}
+
+function isInsideFilePilotTree(
+	state: EditorState,
+	from: number,
+	to: number,
+): boolean {
+	const bodyLines = getTreeFenceBodyLines(state);
+
+	return (
+		bodyLines.has(state.doc.lineAt(from).number) &&
+		bodyLines.has(state.doc.lineAt(to - 1).number)
+	);
+}
+
+
 // Check whether a reference is inside Markdown syntax
 // that should not be replaced.
 function isExcludedRange(
@@ -39,6 +128,7 @@ function isExcludedRange(
 	to: number,
 ): boolean {
 	const tree = syntaxTree(state);
+	const allowCode = isInsideFilePilotTree(state, from, to);
 
 	for (const position of [from, to - 1]) {
 		let node: ReturnType<typeof tree.resolveInner> | null =
@@ -48,7 +138,7 @@ function isExcludedRange(
 			const name = node.name.toLowerCase();
 
 			if (
-				name.includes("code") ||
+				(name.includes("code") && !allowCode) ||
 				name.includes("link") ||
 				name.includes("frontmatter") ||
 				name.includes("yaml") ||

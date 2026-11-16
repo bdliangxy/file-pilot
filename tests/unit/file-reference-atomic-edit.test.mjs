@@ -192,3 +192,64 @@ test('selection-only transactions leave the source document intact', () => {
     assert.equal(result.newSelection.main.from, 0);
     assert.equal(result.newSelection.main.to, 3);
 });
+
+
+test('tree fence references remain atomic in Live Preview', () => {
+    const text = ['```file-pilot-tree', '├── ' + REF_A + ' # Summary', '```'].join('\n');
+    const start = text.indexOf(REF_A);
+    const exclusions = [{
+        from: start, to: start + REF_A.length, name: 'FencedCode',
+    }];
+
+    assert.equal(
+        apply(text, { from: start + 4, to: start + 7 }, { exclusions })
+            .newDoc.toString(),
+        text.slice(0, start) + text.slice(start + REF_A.length),
+    );
+    assert.equal(
+        apply(text, { from: start + 4, insert: 'X' }, { exclusions })
+            .newDoc.toString(),
+        text,
+    );
+});
+
+test('tree lines and summary annotations remain freely editable', () => {
+    const text = ['```file-pilot-tree', '├── ' + REF_A + ' # Summary', '```'].join('\n');
+    const start = text.indexOf(REF_A);
+    const exclusions = [{
+        from: start, to: start + REF_A.length, name: 'FencedCode',
+    }];
+    const comment = text.indexOf('Summary');
+    const result = apply(
+        text, { from: comment, to: comment + 'Summary'.length, insert: 'Edited' },
+        { exclusions },
+    );
+
+    assert.equal(result.newDoc.toString(), text.replace('Summary', 'Edited'));
+});
+
+test('normal code fences and Source Mode do not atomically protect tree-looking references', () => {
+    const normal = ['```text', REF_A, '```'].join('\n');
+    const normalStart = normal.indexOf(REF_A);
+    const exclusions = [{
+        from: normalStart, to: normalStart + REF_A.length, name: 'FencedCode',
+    }];
+    const normalResult = apply(
+        normal, { from: normalStart + 4, to: normalStart + 7 }, { exclusions },
+    );
+    assert.equal(
+        normalResult.newDoc.toString(),
+        normal.slice(0, normalStart + 4) + normal.slice(normalStart + 7),
+    );
+
+    const tree = ['```file-pilot-tree', REF_A, '```'].join('\n');
+    const treeStart = tree.indexOf(REF_A);
+    const { state } = editor(tree, { live: false });
+    const sourceResult = state.update({
+        changes: { from: treeStart + 4, to: treeStart + 7 },
+    });
+    assert.equal(
+        sourceResult.newDoc.toString(),
+        tree.slice(0, treeStart + 4) + tree.slice(treeStart + 7),
+    );
+});

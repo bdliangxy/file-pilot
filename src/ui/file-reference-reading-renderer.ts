@@ -32,12 +32,32 @@ export class FileReferenceReadingRenderer {
 		while (walker.nextNode()) {
 			const node = walker.currentNode as Text;
 
-			// Skip code, links, and already rendered references.
-			if (
-				node.parentElement?.closest(
-					"pre, code, a, .file-pilot-reference",
-				)
-			) {
+			const parent = node.parentElement;
+
+			if (!parent) {
+				continue;
+			}
+
+			// Always skip links and already rendered references.
+			if (parent.closest("a, .file-pilot-reference")) {
+				continue;
+			}
+
+			const code = parent.closest("code");
+
+			// Allow references only inside File Pilot tree code fences.
+			const isFilePilotTree =
+				code !== null &&
+				code.closest("pre") !== null &&
+				(
+					code.classList.contains("language-file-pilot-tree") ||
+					code.closest("pre")?.classList.contains(
+						"language-file-pilot-tree",
+					) === true
+				);
+
+			// Preserve the exclusion for ordinary code.
+			if (parent.closest("pre, code") && !isFilePilotTree) {
 				continue;
 			}
 

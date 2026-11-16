@@ -647,3 +647,129 @@ test('Source Mode receives refresh signals but keeps raw references undecorated'
     assert.equal(ctx.dispatched.length, 1);
     assert.equal(decorations(ctx).length, 0);
 });
+
+
+test('Live Preview renders only references in a dedicated tree fence and normal prose', t => {
+    const ref = shortRef(ID_A);
+    const text = [
+        '```typescript',
+        ref,
+        '```',
+        '```file-pilot-tree',
+        'Project/',
+        '├── ' + ref + ' # Summary',
+        '└── Empty/',
+        '```',
+        'Outside ' + ref,
+    ].join('\n');
+    const first = text.indexOf(ref);
+    const second = text.indexOf(ref, first + ref.length);
+    const third = text.indexOf(ref, second + ref.length);
+    const ctx = setup(t, text, {
+        excluded: [
+            { from: first, to: first + ref.length, name: 'FencedCode' },
+            { from: second, to: second + ref.length, name: 'FencedCode' },
+        ],
+    });
+
+    assert.deepEqual(rendered(ctx).map(item => item.from), [second, third]);
+    assert.deepEqual(
+        rendered(ctx).map(item => item.dom.textContent),
+        ['report.pdf', 'report.pdf'],
+    );
+});
+
+test('tree body detection respects fence length, marker type, and closing fence', t => {
+    const ref = shortRef(ID_A);
+    const text = [
+        '````file-pilot-tree',
+        ref,
+        '```',
+        ref,
+        '````',
+        '```typescript',
+        ref,
+        '```',
+        '~~~file-pilot-tree',
+        ref,
+        '~~~',
+    ].join('\n');
+    const offsets = [...text.matchAll(/\|\|\|@[^|]+\|\|\|/g)]
+        .map(match => match.index);
+    const ctx = setup(t, text, {
+        excluded: offsets.map(from => ({
+            from, to: from + ref.length, name: 'FencedCode',
+        })),
+    });
+
+    assert.deepEqual(decorations(ctx).map(item => item.from), [
+        offsets[0], offsets[1], offsets[3],
+    ]);
+});
+
+test('tree fence markers are not treated as tree body text', t => {
+    const ref = shortRef(ID_A);
+    const text = [
+        '```file-pilot-tree ' + ref,
+        '├── ' + ref,
+        '```',
+        '~~~file-pilot-tree',
+        '└── ' + ref,
+        '~~~',
+    ].join('\n');
+    const offsets = [...text.matchAll(/\|\|\|@[^|]+\|\|\|/g)]
+        .map(match => match.index);
+    const ctx = setup(t, text, {
+        excluded: offsets.map(from => ({
+            from, to: from + ref.length, name: 'FencedCode',
+        })),
+    });
+
+    assert.deepEqual(decorations(ctx).map(item => item.from), [
+        offsets[1], offsets[2],
+    ]);
+});
+
+test('tree references remain raw in Source Mode', t => {
+    const ref = shortRef(ID_A);
+    const text = ['```file-pilot-tree', '├── ' + ref, '```'].join('\n');
+    const ctx = setup(t, text, { live: false });
+
+    assert.deepEqual(decorations(ctx), []);
+    assert.equal(ctx.state.doc.length, text.length);
+});
+
+test('rebuilding decorations after an edited tree fence updates the rendered references', t => {
+    const ref = shortRef(ID_A);
+    const before = ['```file-pilot-tree', ref, '```'].join('\n');
+    const after = ['```text', ref, '```'].join('\n');
+    const ctx = setup(t, before, {
+        excluded: [{
+            from: before.indexOf(ref),
+            to: before.indexOf(ref) + ref.length,
+            name: 'FencedCode',
+        }],
+    });
+    assert.equal(decorations(ctx).length, 1);
+
+    const previous = ctx.view.state;
+    ctx.view.state = makeState(after, {
+        excluded: [{
+            from: after.indexOf(ref),
+            to: after.indexOf(ref) + ref.length,
+            name: 'FencedCode',
+        }],
+    });
+    ctx.view.visibleRanges = [{ from: 0, to: after.length }];
+    ctx.plugin.update({
+        view: ctx.view,
+        startState: previous,
+        state: ctx.view.state,
+        docChanged: true,
+        viewportChanged: false,
+        selectionSet: false,
+        transactions: [],
+    });
+
+    assert.equal(decorations(ctx).length, 0);
+});

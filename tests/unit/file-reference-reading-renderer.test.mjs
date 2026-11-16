@@ -345,3 +345,89 @@ test('reports asynchronous file-action failures through the shared notifier', as
         console.error = previous;
     }
 });
+
+
+test('renders File Pilot tree references while retaining tree text and summaries', t => {
+    const record = makeFileRecord(ID_A, { path: 'docs/report.pdf' });
+    const ctx = setup(t, [record]);
+    const code = ctx.document.createElement('code');
+    code.className = 'language-file-pilot-tree';
+    code.textContent = 'Project/\n├── ' + shortRef(ID_A) + ' # Annual report\n└── EmptyFolder/';
+    const pre = ctx.document.createElement('pre');
+    pre.append(code);
+    ctx.document.body.append(pre);
+
+    ctx.renderer.render(ctx.document.body);
+
+    assert.equal(code.textContent, 'Project/\n├── report.pdf # Annual report\n└── EmptyFolder/');
+    assert.equal(code.querySelectorAll('.file-pilot-reference').length, 1);
+    assert.equal(code.querySelector('.file-pilot-reference').contentEditable, 'false');
+
+    ctx.renderer.render(ctx.document.body);
+    assert.equal(code.querySelectorAll('.file-pilot-reference').length, 1);
+});
+
+test('accepts a tree language class on the pre element', t => {
+    const ctx = setup(t);
+    const pre = ctx.document.createElement('pre');
+    pre.className = 'language-file-pilot-tree';
+    const code = ctx.document.createElement('code');
+    code.textContent = '└── ' + fullRef(ID_A);
+    pre.append(code);
+    ctx.document.body.append(pre);
+
+    ctx.renderer.render(ctx.document.body);
+
+    assert.equal(code.textContent, '└── report.pdf');
+    assert.equal(references(ctx).length, 1);
+});
+
+test('keeps ordinary fenced and inline code raw beside a tree fence', t => {
+    const ctx = setup(t);
+    const ref = shortRef(ID_A);
+
+    const tree = ctx.document.createElement('pre');
+    const treeCode = ctx.document.createElement('code');
+    treeCode.className = 'language-file-pilot-tree';
+    treeCode.textContent = '├── ' + ref;
+    tree.append(treeCode);
+
+    const normal = ctx.document.createElement('pre');
+    const normalCode = ctx.document.createElement('code');
+    normalCode.className = 'language-typescript';
+    normalCode.textContent = ref;
+    normal.append(normalCode);
+
+    const inline = ctx.document.createElement('code');
+    inline.textContent = ref;
+    ctx.document.body.append(tree, normal, inline);
+
+    ctx.renderer.render(ctx.document.body);
+
+    assert.equal(treeCode.textContent, '├── report.pdf');
+    assert.equal(normalCode.textContent, ref);
+    assert.equal(inline.textContent, ref);
+    assert.equal(references(ctx).length, 1);
+});
+
+test('tree references reuse the existing file actions and link exclusions', async t => {
+    const ctx = setup(t);
+    const code = ctx.document.createElement('code');
+    code.className = 'language-file-pilot-tree';
+    code.textContent = '├── ' + shortRef(ID_A);
+    const link = ctx.document.createElement('a');
+    link.textContent = shortRef(ID_A);
+    code.append(link);
+    const pre = ctx.document.createElement('pre');
+    pre.append(code);
+    ctx.document.body.append(pre);
+
+    ctx.renderer.render(ctx.document.body);
+
+    assert.equal(link.textContent, shortRef(ID_A));
+    const reference = code.querySelector('.file-pilot-reference');
+    assert.ok(reference);
+    mouse(ctx, reference, 'dblclick');
+    await flush();
+    assert.deepEqual(ctx.actions.map(action => action.action), ['openSource']);
+});
