@@ -8,7 +8,8 @@ export type FilePilotErrorCode =
 	| 'CLEAR_IN_PROGRESS'
 	| 'SHADOW_NOTE_NOT_FOUND'
 	| 'FILE_OPEN_FAILED'
-	| 'SOURCE_FILE_NOT_FOUND';
+	| 'SOURCE_FILE_NOT_FOUND'
+	| "FILE_REFERENCE_NOT_FOUND";
 
 export class FilePilotError extends Error {
 	constructor(

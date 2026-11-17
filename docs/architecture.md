@@ -14,8 +14,10 @@ flowchart TD
     Main -->|"Rebuild reference index"| Reference["FileReferenceService"]
     Main -->|"Render references"| ReadingRenderer["FileReferenceReadingRenderer"]
     Main -->|"Register editor extension"| EditorExtension["FileReferenceEditorExtension"]
+    Main -->|"Register suggestions"| Suggest["FileReferenceSuggest"]
     ReadingRenderer -->|"Resolve references"| Reference
     EditorExtension -->|"Resolve references"| Reference
+    Suggest -->|"Format references"| Reference
     ReadingRenderer -->|"Create interactive element"| ReferenceElement["FileReferenceElement"]
     EditorExtension -->|"Create interactive element"| ReferenceElement
     ReferenceElement -->|"Resolve current record"| Reference
