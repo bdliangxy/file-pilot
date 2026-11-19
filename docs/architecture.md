@@ -12,6 +12,8 @@ flowchart TD
     Main -->|"Run sync"| Sync["FileSyncService"]
     Main -->|"Execute file actions"| Action["FileActionService"]
     Main -->|"Rebuild reference index"| Reference["FileReferenceService"]
+    Portal["PortalNoteService"] -->|"Read records and settings"| State
+    Portal -->|"Format file references"| Reference
     Main -->|"Render references"| ReadingRenderer["FileReferenceReadingRenderer"]
     Main -->|"Register editor extension"| EditorExtension["FileReferenceEditorExtension"]
     Main -->|"Register suggestions"| Suggest["FileReferenceSuggest"]

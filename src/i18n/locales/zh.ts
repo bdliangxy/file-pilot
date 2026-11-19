@@ -60,7 +60,8 @@ export const zh = {
 	projectNameName: '项目名称',
 	projectNameDesc: '设置项目名称，留空使用默认名称',
 	projectNamePlaceholder: '输入项目名称（可选）',
-	projectNameInvalid: '项目名称不能超过 30 个字符或包含控制字符',
+	projectNameInvalid:
+		'项目名称不能超过 30 个字符，不能包含控制字符或 \\ / : * ? " < > |，且不能以句点结尾',
 
 	oneWayScan: `单向扫描`,
 	scanRootNotConfigured: `请先在插件设置页添加文件夹`,
@@ -106,4 +107,10 @@ export const zh = {
 	fileReferenceAmbiguous: '文件引用存在歧义',
 	fileReferenceAmbiguousHint: '多个受管理文件具有相同的引用短 Key。',
 	fileReferenceCursorMoved: '文件引用插入位置被移动，请重新尝试',
+	insertFileReferenceCommand: '文件引用',
+	updatePortalNoteTreeCommand: '更新目录树',
+	portalNoteUpdated: '目录树已更新',
+	portalNoteUpdateFailed: '更新目录树失败',
+	portalNotePathOccupied:
+		'无法创建总览笔记：目标路径已被文件夹占用。',
 } satisfies Record<keyof typeof en, string>;

@@ -39,6 +39,8 @@ import {
 
 import { notifyFileActionError } from './file-action-error-notifier';
 
+import { showPortalNoteFeedback } from '../utils/portal-note-utils';
+
 export const VIEW_TYPE = 'file-pilot-view';
 interface FileItemState {
 	record: FileRecord;
@@ -204,6 +206,14 @@ export class FilePilotView extends ItemView {
 						button.setDisabled(false);
 						button.setButtonText(t('oneWayScan'));
 					}
+					// Update the Portal Note after showing the scan feedback.
+					try {
+						await this.filePilot.portalNoteService.syncPortalNote();
+						showPortalNoteFeedback();
+					} catch (error) {
+						showPortalNoteFeedback(error);
+					}
+
 				});
 		});
 

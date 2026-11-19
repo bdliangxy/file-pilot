@@ -271,9 +271,16 @@ export class PluginStateService {
 					},
 				);
 
+				const hasInvalidFileNameCharacters =
+					/[\\/:*?"<>|]/.test(newName);
+
+				const hasTrailingDot = newName.endsWith('.');
+
 				if (
 					Array.from(newName).length > MAX_PROJECT_NAME_LENGTH ||
-					hasControlCharacters
+					hasControlCharacters ||
+					hasInvalidFileNameCharacters ||
+					hasTrailingDot
 				) {
 					result.errors.projectName =
 						new Error('Invalid project name');

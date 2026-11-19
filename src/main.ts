@@ -1,4 +1,4 @@
-import { Plugin, getLanguage } from 'obsidian';
+import { Plugin } from 'obsidian';
 import { shell } from 'electron';
 import { PluginStateService } from './data/plugin-state-service';
 import { logger } from './utils/logger';
@@ -29,6 +29,8 @@ import {
 	isInsideCode,
 	isDirectlyBelowTable,
 } from './ui/file-reference-suggest';
+import { PortalNoteService } from './core/portal-note-service';
+import { showPortalNoteFeedback } from './utils/portal-note-utils';
 
 export default class FilePilotPlugin extends Plugin {
 	//the state service owns and persists all plugin data.
@@ -41,6 +43,7 @@ export default class FilePilotPlugin extends Plugin {
 	public shadowNoteService!: ShadowNoteService;
 	public shadowNoteWatcher!: ShadowNoteWatcher;
 	public readonly fileReferenceService = new FileReferenceService();
+	public portalNoteService!: PortalNoteService;
 
 	async onload(): Promise<void> {
 
@@ -57,6 +60,11 @@ export default class FilePilotPlugin extends Plugin {
 			this.shadowNoteService,
 			(records) => this.stateService.addFileRecords(records),
 			() => this.stateService.getFileRecords(),
+		);
+		this.portalNoteService = new PortalNoteService(
+			this.app,
+			this.stateService,
+			this.fileReferenceService,
 		);
 		this.fileActionService = new FileActionService(
 			this.app,
@@ -132,9 +140,7 @@ export default class FilePilotPlugin extends Plugin {
 
 		this.addCommand({
 			id: "insert-file-reference",
-			name: getLanguage().startsWith("zh")
-				? "文件引用"
-				: "File reference",
+			name: t('insertFileReferenceCommand'),
 			icon: "file-search",
 
 			editorCheckCallback: (checking, editor, ctx) => {
@@ -168,6 +174,17 @@ export default class FilePilotPlugin extends Plugin {
 			},
 		});
 
+		// Register the Portal Note directory tree update command.
+		this.addCommand({
+			id: 'update-portal-note-tree',
+			name: t('updatePortalNoteTreeCommand'),
+			callback: () => {
+				void this.portalNoteService.syncPortalNote().then(
+					() => showPortalNoteFeedback(),
+					(error: unknown) => showPortalNoteFeedback(error),
+				);
+			},
+		});
 
 		// Add the ribbon icon.
 		this.addRibbonIcon(
@@ -219,6 +236,7 @@ export default class FilePilotPlugin extends Plugin {
 			this.stateService.getFileScope(),
 		);
 
+		// Rebuild references after new FileRecords are persisted.
 		if (result.importedCount > 0) {
 			this.rebuildFileReferenceIndex();
 		}

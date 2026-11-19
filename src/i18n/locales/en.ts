@@ -53,7 +53,8 @@ export const en = {
 	projectNameName: 'Project name',
 	projectNameDesc: 'Set the project name. Leave blank to use the default.',
 	projectNamePlaceholder: 'Enter a project name (optional)',
-	projectNameInvalid: 'Project name must be at most 30 characters and contain no control characters',
+	projectNameInvalid:
+		'Project name must be at most 30 characters, contain no control characters or \\ / : * ? " < > |, and not end with a period',
 	// responses after selecting directory
 	scanRootSaved: `Scan directory saved`,
 	scanRootInvalid: `Enter a valid absolute directory path`,
@@ -107,4 +108,10 @@ export const en = {
 	fileReferenceAmbiguous: 'Ambiguous file reference',
 	fileReferenceAmbiguousHint: 'Multiple managed files share this reference key.',
 	fileReferenceCursorMoved: 'The file reference insertion position changed. Please try again',
+	insertFileReferenceCommand: 'File reference',
+	updatePortalNoteTreeCommand: 'Update directory tree',
+	portalNoteUpdated: 'Directory tree updated',
+	portalNoteUpdateFailed: 'Failed to update directory tree',
+	portalNotePathOccupied:
+		'Cannot create Portal Note: the target path is occupied by a folder.',
 } as const;

@@ -310,3 +310,52 @@ export function replaceFirstParagraph(
 	return (replacement);
 }
 
+
+/**
+ * Replace the File Pilot tree code fence within a Markdown section.
+ * Preserve all content outside the target code fence.
+ */
+export function replacePortalTreeFence(
+	oldSection: string,
+	newTreeBlock: string,
+): string {
+	const nodes = markdownParser.parse(oldSection).children;
+
+	const treeBlocks = nodes.filter(
+		node =>
+			node.type === 'code' &&
+			node.lang === 'file-pilot-tree',
+	);
+
+	// Never guess which block to replace.
+	if (treeBlocks.length > 1) {
+		throw new Error(
+			'Multiple File Pilot tree code blocks found',
+		);
+	}
+
+	const target = treeBlocks[0];
+
+	// Insert a tree block when the section has none.
+	if (!target) {
+		return insertMarkdownBlock(
+			oldSection,
+			newTreeBlock,
+			0,
+		);
+	}
+
+	const start = target.position?.start.offset;
+	const end = target.position?.end.offset;
+
+	if (start === undefined || end === undefined) {
+		throw new Error('Missing tree code block position');
+	}
+
+	// Replace only the code fence, preserving surrounding text.
+	return (
+		oldSection.slice(0, start) +
+		newTreeBlock +
+		oldSection.slice(end)
+	);
+}

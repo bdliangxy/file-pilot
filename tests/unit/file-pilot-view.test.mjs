@@ -54,6 +54,9 @@ function setup(summaryReader = async () => null) {
                 return summaryReader(received);
             },
         },
+        portalNoteService: {
+            syncPortalNote: async () => {},
+        },
     };
     const view = new FilePilotView({
         app,
@@ -370,7 +373,7 @@ test('folder summary and ignored status update without mutating its record', asy
     await ui.view.onClose();
 });
 
-test('scan notice reports file and folder imports and no new entries', async () => {
+test('scan feedback is shown before Portal Note feedback', async () => {
     const ui = setup();
     let result = {
         importedCount: 3,
@@ -384,18 +387,27 @@ test('scan notice reports file and folder imports and no new entries', async () 
 
     scanButton.click();
     await flush();
-    assert.equal(Notice.messages.at(-1), 'Imported 1 files and 2 folders');
+    assert.deepEqual(Notice.messages, [
+        'Imported 1 files and 2 folders',
+        'Directory tree updated',
+    ]);
 
     result = { importedCount: 1, importedFileCount: 0, importedFolderCount: 1 };
     scanButton.click();
     await flush();
-    assert.equal(Notice.messages.at(-1), 'Imported 0 files and 1 folders');
+    assert.deepEqual(Notice.messages.slice(2), [
+        'Imported 0 files and 1 folders',
+        'Directory tree updated',
+    ]);
 
     result = { importedCount: 0, importedFileCount: 0, importedFolderCount: 0 };
     scanButton.click();
     await flush();
-    assert.equal(Notice.messages.at(-1), 'No new files or folders imported');
-    assert.equal(Notice.messages.length, 3);
+    assert.deepEqual(Notice.messages.slice(4), [
+        'No new files or folders imported',
+        'Directory tree updated',
+    ]);
+    assert.equal(Notice.messages.length, 6);
     await ui.view.onClose();
 });
 

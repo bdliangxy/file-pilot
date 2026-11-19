@@ -9,7 +9,8 @@ export type FilePilotErrorCode =
 	| 'SHADOW_NOTE_NOT_FOUND'
 	| 'FILE_OPEN_FAILED'
 	| 'SOURCE_FILE_NOT_FOUND'
-	| "FILE_REFERENCE_NOT_FOUND";
+	| "FILE_REFERENCE_NOT_FOUND"
+	| 'PORTAL_NOTE_PATH_OCCUPIED';
 
 export class FilePilotError extends Error {
 	constructor(

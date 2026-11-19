@@ -11,6 +11,7 @@ const {
 	updateMarkdownSection,
 	insertMarkdownBlock,
 	replaceFirstParagraph,
+	replacePortalTreeFence,
 } = await jiti.import('../../src/utils/shadow-note-utils.ts');
 
 test('generates Shadow Note names using parent folders', () => {
@@ -373,3 +374,189 @@ test('does not change the document when the updater returns its original section
     );
     assert.equal(updated, content);
 });
+
+
+const PORTAL_TREE_BACKTICKS = String.fromCharCode(96).repeat(3);
+
+function portalTreeFence(body, marker = PORTAL_TREE_BACKTICKS, language = 'file-pilot-tree') {
+    return [marker + language, body, marker].join('\n');
+}
+
+test('replacePortalTreeFence replaces only the tree fence and preserves surrounding notes', () => {
+    const oldBlock = portalTreeFence('Project/\n├── old-reference');
+    const newBlock = portalTreeFence('Project/\n├── new-reference\n└── other-reference');
+    const section = 'Introductory notes.\n\n' + oldBlock
+        + '\n\nUser notes written without a new heading.\n\n';
+
+    assert.equal(
+        replacePortalTreeFence(section, newBlock),
+        section.replace(oldBlock, newBlock),
+    );
+});
+
+test('replacePortalTreeFence inserts a tree fence when the section is empty', () => {
+    const newBlock = portalTreeFence('Project/');
+    assert.equal(replacePortalTreeFence('', newBlock), newBlock + '\n');
+});
+
+test('replacePortalTreeFence inserts a missing tree fence without deleting existing notes', () => {
+    const newBlock = portalTreeFence('Project/\n└── reference');
+    const section = 'Existing notes.\n\nAdditional notes.\n';
+
+    assert.equal(
+        replacePortalTreeFence(section, newBlock),
+        newBlock + '\n\n' + section,
+    );
+});
+
+test('replacePortalTreeFence ignores other fenced code languages', () => {
+    const regularCode = ['~~~ts', 'const value = 42;', '~~~'].join('\n');
+    const newBlock = portalTreeFence('Project/');
+    const section = regularCode + '\n\nKeep this paragraph.';
+
+    assert.equal(
+        replacePortalTreeFence(section, newBlock),
+        newBlock + '\n\n' + section,
+    );
+});
+
+test('replacePortalTreeFence rejects multiple tree fences instead of choosing one', () => {
+    const section = portalTreeFence('First/')
+        + '\n\n' + portalTreeFence('Second/', '~~~');
+
+    assert.throws(
+        () => replacePortalTreeFence(section, portalTreeFence('Updated/')),
+        /Multiple File Pilot tree code blocks found/,
+    );
+});
+
+test('replacePortalTreeFence recognizes tilde fences and extended fence markers', () => {
+    for (const marker of ['~~~', String.fromCharCode(96).repeat(5)]) {
+        const oldBlock = portalTreeFence('Original/', marker);
+        const newBlock = portalTreeFence('Updated/');
+        const section = 'Before.\n\n' + oldBlock + '\n\nAfter.';
+
+        assert.equal(
+            replacePortalTreeFence(section, newBlock),
+            section.replace(oldBlock, newBlock),
+        );
+    }
+});
+
+test('replacePortalTreeFence handles language info strings with extra metadata', () => {
+    const section = [
+        '~~~file-pilot-tree title=directory',
+        'Old/',
+        '~~~',
+        '',
+        'After the tree.',
+    ].join('\n');
+    const replacement = portalTreeFence('New/');
+
+    assert.equal(
+        replacePortalTreeFence(section, replacement),
+        replacement + '\n\nAfter the tree.',
+    );
+});
+
+test('replacePortalTreeFence does not treat inline or quoted fence text as a tree block', () => {
+    const tick = String.fromCharCode(96);
+    const inline = tick + 'file-pilot-tree' + tick;
+    const section = [
+        'Mention ' + inline + ' in a paragraph.',
+        '',
+        '> ~~~file-pilot-tree',
+        '> Not the managed block.',
+        '> ~~~',
+        '',
+        'Keep this note.',
+    ].join('\n');
+    const newBlock = portalTreeFence('Actual/');
+
+    assert.equal(
+        replacePortalTreeFence(section, newBlock),
+        newBlock + '\n\n' + section,
+    );
+});
+
+test('replacePortalTreeFence preserves CRLF line endings outside the tree fence', () => {
+    const oldBlock = ['~~~file-pilot-tree', 'Old/', '~~~'].join('\r\n');
+    const newBlock = ['~~~file-pilot-tree', 'New/', '~~~'].join('\r\n');
+    const section = 'Before.\r\n\r\n' + oldBlock + '\r\n\r\nAfter.\r\n';
+
+    assert.equal(
+        replacePortalTreeFence(section, newBlock),
+        section.replace(oldBlock, newBlock),
+    );
+});
+
+test('replacePortalTreeFence leaves an unchanged tree fence untouched', () => {
+    const block = portalTreeFence('Project/\n└── reference');
+    const section = '\n\n' + block + '\n\nUser notes.\n';
+
+    assert.equal(replacePortalTreeFence(section, block), section);
+});
+
+test('updateMarkdownSection and replacePortalTreeFence preserve notes and adjacent sections', () => {
+    const oldBlock = portalTreeFence('Old/');
+    const newBlock = portalTreeFence('New/\n└── reference');
+    const content = [
+        '# Overview',
+        '',
+        '## File Pilot Directory Tree',
+        '',
+        oldBlock,
+        '',
+        'User notes without a separate heading.',
+        '',
+        '## Other Section',
+        '',
+        'Keep this content.',
+        '',
+    ].join('\n');
+
+    assert.equal(
+        updateMarkdownSection(
+            content,
+            'File Pilot Directory Tree',
+            newBlock,
+            replacePortalTreeFence,
+            2,
+            'bottom',
+        ),
+        content.replace(oldBlock, newBlock),
+    );
+});
+
+test('updateMarkdownSection creates a missing Portal tree section without removing text', () => {
+    const content = '# Overview\n\nKeep this introduction.\n';
+    const newBlock = portalTreeFence('Project/\n└── reference');
+    const result = updateMarkdownSection(
+        content,
+        'File Pilot Directory Tree',
+        newBlock,
+        replacePortalTreeFence,
+        2,
+        'bottom',
+    );
+
+    assert.ok(result.startsWith(content));
+    assert.ok(result.includes('## File Pilot Directory Tree\n\n' + newBlock));
+    assert.equal((result.match(/## File Pilot Directory Tree/g) ?? []).length, 1);
+});
+
+test('updateMarkdownSection makes no changes when Portal tree content is current', () => {
+    const tree = portalTreeFence('Project/');
+    const content = '## File Pilot Directory Tree\n\n' + tree + '\n\nNotes.\n';
+
+    assert.equal(
+        updateMarkdownSection(
+            content,
+            'File Pilot Directory Tree',
+            tree,
+            replacePortalTreeFence,
+        ),
+        content,
+    );
+});
+
