@@ -111,6 +111,7 @@ export const en = {
 	insertFileReferenceCommand: 'File reference',
 	updatePortalNoteTreeCommand: 'Update directory tree',
 	portalNoteUpdated: 'Directory tree updated',
+	portalNoteUnchanged: 'Directory tree is already up to date',
 	portalNoteUpdateFailed: 'Failed to update directory tree',
 	portalNotePathOccupied:
 		'Cannot create Portal Note: the target path is occupied by a folder.',

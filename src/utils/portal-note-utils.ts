@@ -3,22 +3,45 @@ import { Notice } from 'obsidian';
 import { FilePilotError } from '../error';
 import { t } from '../i18n';
 
-export function showPortalNoteFeedback(error?: unknown): void {
-	if (error === undefined) {
-		new Notice(t('portalNoteUpdated'));
+export type PortalNoteFeedback =
+	| {
+		status: 'success';
+		changed: boolean;
+	}
+	| {
+		status: 'failure';
+		error: unknown;
+	};
+
+export function showPortalNoteFeedback(
+	feedback: PortalNoteFeedback,
+): void {
+	if (feedback.status === 'success') {
+		new Notice(
+			t(
+				feedback.changed
+					? 'portalNoteUpdated'
+					: 'portalNoteUnchanged',
+			),
+		);
 		return;
 	}
 
+	const { error } = feedback;
+
 	console.error('Failed to update Portal Note tree:', error);
 
-	new Notice(t('portalNoteUpdateFailed'));
-
 	if (error instanceof FilePilotError) {
-
 		switch (error.code) {
 			case 'PORTAL_NOTE_PATH_OCCUPIED':
 				new Notice(t('portalNotePathOccupied'));
 				return;
+
+			default:
+				new Notice(t('portalNoteUpdateFailed'));
+				return;
 		}
 	}
+
+	new Notice(t('portalNoteUpdateFailed'));
 }

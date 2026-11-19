@@ -55,7 +55,9 @@ function setup(summaryReader = async () => null) {
             },
         },
         portalNoteService: {
-            syncPortalNote: async () => {},
+            syncPortalNote: async () => ({
+                changed: true,
+            }),
         },
     };
     const view = new FilePilotView({
@@ -411,6 +413,33 @@ test('scan feedback is shown before Portal Note feedback', async () => {
     await ui.view.onClose();
 });
 
+test('scan feedback reports when the Portal Note tree is unchanged', async () => {
+    const ui = setup();
+
+    ui.view.filePilot.syncFiles = async () => ({
+        importedCount: 0,
+        importedFileCount: 0,
+        importedFolderCount: 0,
+    });
+    ui.view.filePilot.portalNoteService.syncPortalNote = async () => ({
+        changed: false,
+    });
+
+    await ui.view.onOpen();
+
+    const scanButton = ui.view.rootSetting.controlEl.children[0];
+    Notice.messages.length = 0;
+
+    scanButton.click();
+    await flush();
+
+    assert.deepEqual(Notice.messages, [
+        'No new files or folders imported',
+        'Directory tree is already up to date',
+    ]);
+
+    await ui.view.onClose();
+});
 test('settings shortcut remains beside the title after a name refresh', async () => {
     const ui = setup();
     await ui.view.onOpen();

@@ -111,11 +111,11 @@ test('creates a Portal Note named after the project and renders its FileRecords'
         records: [record],
     });
 
-    const note = await service.syncPortalNote();
+    const result = await service.syncPortalNote();
     const content = contents.get('My Project.md');
 
-    assert.ok(note instanceof TFile);
-    assert.equal(note.path, 'My Project.md');
+    assert.equal(result.changed, true);
+    assert.equal(calls.created[0].file.path, 'My Project.md');
     assert.deepEqual(calls.lookups, ['My Project.md']);
     assert.equal(calls.created.length, 1);
     assert.equal(calls.processed.length, 0);
@@ -133,10 +133,11 @@ test('uses the default Portal Note name and creates a root-only tree when no rec
         records: [],
     });
 
-    const note = await service.syncPortalNote();
+    const result = await service.syncPortalNote();
     const content = contents.get('PORTAL NOTE.md');
 
-    assert.equal(note.path, 'PORTAL NOTE.md');
+    assert.equal(result.changed, true);
+    assert.equal(calls.created[0].file.path, 'PORTAL NOTE.md');
     assert.deepEqual(calls.lookups, ['PORTAL NOTE.md']);
     assert.equal(calls.created.length, 1);
     assert.equal(calls.processed.length, 0);
@@ -177,10 +178,10 @@ test('updates only the managed tree fence and preserves surrounding Markdown con
         files: [{ path: existingFile.path, content: existingContent }],
     });
 
-    const note = await service.syncPortalNote();
+    const result = await service.syncPortalNote();
     const updatedContent = contents.get(existingFile.path);
 
-    assert.equal(note.path, existingFile.path);
+    assert.equal(result.changed, true);
     assert.deepEqual(calls.created, []);
     assert.equal(calls.processed.length, 1);
     assert.equal(calls.processed[0].path, existingFile.path);
@@ -205,11 +206,14 @@ test('repeated synchronization leaves an already current Portal Note unchanged',
         records: [record],
     });
 
-    await service.syncPortalNote();
+    const firstResult = await service.syncPortalNote();
     const firstContent = contents.get('My Project.md');
 
-    await service.syncPortalNote();
+    assert.equal(firstResult.changed, true);
 
+    const secondResult = await service.syncPortalNote();
+
+    assert.equal(secondResult.changed, false);
     assert.equal(contents.get('My Project.md'), firstContent);
     assert.equal(calls.created.length, 1);
     assert.equal(calls.processed.length, 1);

@@ -180,8 +180,14 @@ export default class FilePilotPlugin extends Plugin {
 			name: t('updatePortalNoteTreeCommand'),
 			callback: () => {
 				void this.portalNoteService.syncPortalNote().then(
-					() => showPortalNoteFeedback(),
-					(error: unknown) => showPortalNoteFeedback(error),
+					(result) => showPortalNoteFeedback({
+						status: 'success',
+						changed: result.changed,
+					}),
+					(error: unknown) => showPortalNoteFeedback({
+						status: 'failure',
+						error,
+					}),
 				);
 			},
 		});

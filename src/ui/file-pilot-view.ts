@@ -208,10 +208,18 @@ export class FilePilotView extends ItemView {
 					}
 					// Update the Portal Note after showing the scan feedback.
 					try {
-						await this.filePilot.portalNoteService.syncPortalNote();
-						showPortalNoteFeedback();
+						const result =
+							await this.filePilot.portalNoteService.syncPortalNote();
+
+						showPortalNoteFeedback({
+							status: 'success',
+							changed: result.changed,
+						});
 					} catch (error) {
-						showPortalNoteFeedback(error);
+						showPortalNoteFeedback({
+							status: 'failure',
+							error,
+						});
 					}
 
 				});

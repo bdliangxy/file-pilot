@@ -110,6 +110,7 @@ export const zh = {
 	insertFileReferenceCommand: '文件引用',
 	updatePortalNoteTreeCommand: '更新目录树',
 	portalNoteUpdated: '目录树已更新',
+	portalNoteUnchanged: '目录树已是最新',
 	portalNoteUpdateFailed: '更新目录树失败',
 	portalNotePathOccupied:
 		'无法创建总览笔记：目标路径已被文件夹占用。',

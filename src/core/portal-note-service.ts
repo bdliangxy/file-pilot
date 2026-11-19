@@ -17,6 +17,10 @@ import {
 
 import { FilePilotError } from '../error';
 
+export interface PortalNoteSyncResult {
+	changed: boolean;
+}
+
 const PORTAL_TREE_HEADING = 'Directory Tree';
 
 export class PortalNoteService {
@@ -26,7 +30,7 @@ export class PortalNoteService {
 		private readonly referenceService: FileReferenceService,
 	) { }
 
-	async syncPortalNote(): Promise<TFile> {
+	async syncPortalNote(): Promise<PortalNoteSyncResult> {
 		// Determine the Portal Note path.
 		const projectName = this.stateService.getProjectName();
 		const noteName = projectName || 'PORTAL NOTE';
@@ -54,10 +58,11 @@ export class PortalNoteService {
 		].join('\n');
 
 		const vault = this.app.vault;
-		const existing = vault.getAbstractFileByPath(notePath);
+		const existingEntry = vault.getAbstractFileByPath(notePath);
 
-		// Create the Portal Note if it does not exist.
-		if (existing === null) {
+		// Initialize the Portal Note with the Directory Tree section.
+		// Reuse the section updater to keep creation and subsequent updates consistent.
+		if (existingEntry === null) {
 			const content = updateMarkdownSection(
 				'',
 				PORTAL_TREE_HEADING,
@@ -65,10 +70,14 @@ export class PortalNoteService {
 				replacePortalTreeFence,
 			);
 
-			return await vault.create(notePath, content);
+			await vault.create(notePath, content);
+
+			return {
+				changed: true,
+			};
 		}
 
-		if (!(existing instanceof TFile)) {
+		if (!(existingEntry instanceof TFile)) {
 			throw new FilePilotError(
 				'PORTAL_NOTE_PATH_OCCUPIED',
 				`Portal Note path is occupied: ${notePath}`,
@@ -76,15 +85,23 @@ export class PortalNoteService {
 		}
 
 		// Update only the managed tree fence.
-		await vault.process(existing, (content) =>
-			updateMarkdownSection(
+		let changed = false;
+
+		await vault.process(existingEntry, (content) => {
+			const updatedContent = updateMarkdownSection(
 				content,
 				PORTAL_TREE_HEADING,
 				treeBlock,
 				replacePortalTreeFence,
-			),
-		);
+			);
 
-		return existing;
+			changed = updatedContent !== content;
+
+			return updatedContent;
+		});
+
+		return {
+			changed
+		};
 	}
 }
