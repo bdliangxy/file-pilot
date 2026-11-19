@@ -426,22 +426,78 @@ test('failed visibility setting persistence preserves the previous value', async
 });
 
 
-test('project name is trimmed, persisted and survives reloading', async () => {
+test('project name is trimmed, previous name is recorded and both survive reloading', async () => {
     const adapter = createFakeDataAdapter(makePluginData());
     const first = new PluginStateService(adapter);
     await first.load();
+
     assert.equal(first.getProjectName(), '');
+    assert.equal(first.getPreviousProjectName(), null);
 
     assert.deepEqual(await first.updateSettings({ projectName: '  Work Files  ' }), {
         updated: ['projectName'], errors: {},
     });
     assert.equal(first.getProjectName(), 'Work Files');
+    assert.equal(first.getPreviousProjectName(), '');
     assert.equal(adapter.savedData.length, 1);
+    assert.equal(adapter.savedData[0].settingData.previousProjectName, '');
 
     const next = new PluginStateService(adapter);
     await next.load();
     assert.equal(next.getProjectName(), 'Work Files');
+    assert.equal(next.getPreviousProjectName(), '');
     assert.equal(adapter.savedData.length, 1);
+});
+
+test('preserves the first previous project name across consecutive renames', async () => {
+    const { service, savedData } = createPluginStateServiceTestContext(
+        PluginStateService,
+        makePluginData({ projectName: 'Project A' }),
+    );
+    await service.load();
+
+    await service.updateSettings({ projectName: 'Project B' });
+    assert.equal(service.getProjectName(), 'Project B');
+    assert.equal(service.getPreviousProjectName(), 'Project A');
+
+    await service.updateSettings({ projectName: 'Project C' });
+    assert.equal(service.getProjectName(), 'Project C');
+    assert.equal(service.getPreviousProjectName(), 'Project A');
+    assert.equal(savedData.length, 2);
+    assert.equal(savedData[1].settingData.projectName, 'Project C');
+    assert.equal(savedData[1].settingData.previousProjectName, 'Project A');
+});
+
+test('clears previous project name and persists the result only once', async () => {
+    const { service, savedData } = createPluginStateServiceTestContext(
+        PluginStateService,
+        makePluginData({ projectName: 'Project B', previousProjectName: 'Project A' }),
+    );
+    await service.load();
+
+    await service.clearPreviousProjectName();
+    assert.equal(service.getProjectName(), 'Project B');
+    assert.equal(service.getPreviousProjectName(), null);
+    assert.equal(savedData.length, 1);
+    assert.equal(savedData[0].settingData.previousProjectName, null);
+
+    await service.clearPreviousProjectName();
+    assert.equal(savedData.length, 1);
+});
+
+test('failed clearing preserves the previous project name in memory', async () => {
+    const service = new PluginStateService({
+        loadData: async () => makePluginData({
+            projectName: 'Project B',
+            previousProjectName: 'Project A',
+        }),
+        saveData: async () => { throw new Error('Disk failure'); },
+    });
+    await service.load();
+
+    await assert.rejects(service.clearPreviousProjectName(), /Disk failure/);
+    assert.equal(service.getProjectName(), 'Project B');
+    assert.equal(service.getPreviousProjectName(), 'Project A');
 });
 
 test('project name accepts 30 Unicode characters but rejects longer or control-character names', async () => {
@@ -466,9 +522,11 @@ test('unchanged project name does not persist, and clearing it restores the defa
     );
     await service.load();
     assert.deepEqual((await service.updateSettings({ projectName: ' Work ' })).updated, []);
+    assert.equal(service.getPreviousProjectName(), null);
     assert.equal(savedData.length, 0);
     assert.deepEqual((await service.updateSettings({ projectName: '  ' })).updated, ['projectName']);
     assert.equal(service.getProjectName(), '');
+    assert.equal(service.getPreviousProjectName(), 'Work');
     assert.equal(savedData.length, 1);
 });
 
@@ -481,6 +539,7 @@ test('invalid project name does not block other valid settings', async () => {
     assert.deepEqual(result.updated, ['ignorePatterns']);
     assert.ok(result.errors.projectName instanceof Error);
     assert.equal(service.getProjectName(), '');
+    assert.equal(service.getPreviousProjectName(), null);
     assert.deepEqual(service.getIgnorePatterns(), ['*.log']);
     assert.equal(savedData.length, 1);
 });
@@ -493,4 +552,5 @@ test('failed project-name persistence preserves the previous value', async () =>
     await service.load();
     await assert.rejects(service.updateSettings({ projectName: 'New' }), /Disk failure/);
     assert.equal(service.getProjectName(), 'Old');
+    assert.equal(service.getPreviousProjectName(), null);
 });

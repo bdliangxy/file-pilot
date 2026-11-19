@@ -4,6 +4,7 @@ export function makePluginData({
 	watchEnabled = true,
 	hideShadowNotesFlag = true,
 	projectName = '',
+	previousProjectName = null,
 	fileRecords = [], 
 	version = 2,
 } = {}) {
@@ -15,6 +16,7 @@ export function makePluginData({
 				watchEnabled,
 			},
 			projectName,
+			previousProjectName,
 			hideShadowNotesFlag,
 		},
 		pluginData: {

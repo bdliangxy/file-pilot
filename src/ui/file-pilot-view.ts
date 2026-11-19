@@ -152,7 +152,9 @@ export class FilePilotView extends ItemView {
 		setIcon(settingsButton, 'settings');
 
 		settingsButton.addEventListener('click', () => {
-			void this.openPluginSettings();
+			void this.openPluginSettings().catch((error: unknown) => {
+				console.error('Failed to open File Pilot settings', error);
+			});
 		});
 
 		// Move the existing title into the title row.

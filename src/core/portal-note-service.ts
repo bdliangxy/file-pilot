@@ -30,11 +30,19 @@ export class PortalNoteService {
 		private readonly referenceService: FileReferenceService,
 	) { }
 
+
 	async syncPortalNote(): Promise<PortalNoteSyncResult> {
-		// Determine the Portal Note path.
+		// Determine the current and previous Portal Note paths.
 		const projectName = this.stateService.getProjectName();
 		const noteName = projectName || 'PORTAL NOTE';
 		const notePath = `${noteName}.md`;
+
+		const previousProjectName =
+			this.stateService.getPreviousProjectName();
+		const previousNotePath =
+			previousProjectName === null
+				? null
+				: `${previousProjectName || 'PORTAL NOTE'}.md`;
 
 		// Build the tree using current FileRecords.
 		const records = this.stateService.getFileRecords();
@@ -58,10 +66,31 @@ export class PortalNoteService {
 		].join('\n');
 
 		const vault = this.app.vault;
-		const existingEntry = vault.getAbstractFileByPath(notePath);
 
-		// Initialize the Portal Note with the Directory Tree section.
-		// Reuse the section updater to keep creation and subsequent updates consistent.
+		let existingEntry = vault.getAbstractFileByPath(notePath);
+		let renamed = false;
+
+		// Locate and rename the previous Portal Note when necessary.
+		if (
+			previousNotePath !== null &&
+			previousNotePath !== notePath
+		) {
+			const previousEntry =
+				vault.getAbstractFileByPath(previousNotePath);
+
+			if (
+				previousEntry instanceof TFile &&
+				existingEntry === null
+			) {
+				await vault.rename(previousEntry, notePath);
+
+				existingEntry = previousEntry;
+				renamed = true;
+			}
+		}
+
+		// Create a new Portal Note when neither the current nor
+		// the previous Portal Note exists.
 		if (existingEntry === null) {
 			const content = updateMarkdownSection(
 				'',
@@ -71,6 +100,10 @@ export class PortalNoteService {
 			);
 
 			await vault.create(notePath, content);
+
+			if (previousProjectName !== null) {
+				await this.stateService.clearPreviousProjectName();
+			}
 
 			return {
 				changed: true,
@@ -85,7 +118,8 @@ export class PortalNoteService {
 		}
 
 		// Update only the managed tree fence.
-		let changed = false;
+		// Renaming also counts as a change.
+		let changed = renamed;
 
 		await vault.process(existingEntry, (content) => {
 			const updatedContent = updateMarkdownSection(
@@ -95,13 +129,19 @@ export class PortalNoteService {
 				replacePortalTreeFence,
 			);
 
-			changed = updatedContent !== content;
+			changed = updatedContent !== content || changed;
 
 			return updatedContent;
 		});
 
+		// Clear the previous name only after successful synchronization.
+		if (previousProjectName !== null) {
+			await this.stateService.clearPreviousProjectName();
+		}
+
 		return {
-			changed
+			changed,
 		};
 	}
+
 }

@@ -24,6 +24,7 @@ function createFakeVault({ files = [], folders = [] } = {}) {
         lookups: [],
         created: [],
         processed: [],
+        renamed: [],
     };
 
     for (const { path: filePath, content } of files) {
@@ -50,6 +51,28 @@ function createFakeVault({ files = [], folders = [] } = {}) {
             return file;
         },
 
+        async rename(file, newPath) {
+            const oldPath = file.path;
+
+            if (entries.has(newPath)) {
+                throw new Error(`Path already exists: ${newPath}`);
+            }
+
+            const content = contents.get(oldPath);
+
+            entries.delete(oldPath);
+            contents.delete(oldPath);
+
+            file.path = newPath;
+            entries.set(newPath, file);
+
+            if (content !== undefined) {
+                contents.set(newPath, content);
+            }
+
+            calls.renamed.push({ file, oldPath, newPath });
+        },
+
         async process(file, updater) {
             calls.processed.push(file);
             const current = contents.get(file.path);
@@ -64,6 +87,7 @@ function createFakeVault({ files = [], folders = [] } = {}) {
 
 function createFixture({
     projectName = 'My Project',
+    previousProjectName = null,
     rootPath = '',
     records = [],
     files = [],
@@ -72,11 +96,20 @@ function createFixture({
 } = {}) {
     const { vault, contents, calls } = createFakeVault({ files, folders });
     const referenceCalls = [];
+    const stateCalls = {
+        clearedPreviousProjectName: 0,
+    };
+    let pendingPreviousProjectName = previousProjectName;
 
     const stateService = {
         getProjectName: () => projectName,
+        getPreviousProjectName: () => pendingPreviousProjectName,
         getRootPath: () => rootPath,
         getFileRecords: () => records,
+        async clearPreviousProjectName() {
+            stateCalls.clearedPreviousProjectName += 1;
+            pendingPreviousProjectName = null;
+        },
     };
 
     const referenceService = {
@@ -99,6 +132,7 @@ function createFixture({
         contents,
         calls,
         referenceCalls,
+        stateCalls,
     };
 }
 
@@ -217,6 +251,108 @@ test('repeated synchronization leaves an already current Portal Note unchanged',
     assert.equal(contents.get('My Project.md'), firstContent);
     assert.equal(calls.created.length, 1);
     assert.equal(calls.processed.length, 1);
+});
+
+test('renames the previous Portal Note when the new path is free', async () => {
+    const previousContent = [
+        '# User content',
+        '',
+        'Preserve this text.',
+        '',
+        '## Directory Tree',
+        '',
+        '```file-pilot-tree',
+        'Old/',
+        '```',
+    ].join('\n');
+
+    const { service, contents, calls, stateCalls } = createFixture({
+        projectName: 'Project B',
+        previousProjectName: 'Project A',
+        files: [{ path: 'Project A.md', content: previousContent }],
+    });
+
+    const result = await service.syncPortalNote();
+
+    assert.equal(result.changed, true);
+    assert.equal(contents.has('Project A.md'), false);
+    assert.ok(contents.has('Project B.md'));
+    assert.match(contents.get('Project B.md'), /Preserve this text\./);
+    assert.equal(calls.renamed.length, 1);
+    assert.deepEqual(
+        { oldPath: calls.renamed[0].oldPath, newPath: calls.renamed[0].newPath },
+        { oldPath: 'Project A.md', newPath: 'Project B.md' },
+    );
+    assert.equal(calls.processed.length, 1);
+    assert.equal(stateCalls.clearedPreviousProjectName, 1);
+});
+
+test('updates the new Portal Note and preserves the old note when both exist', async () => {
+    const oldContent = '# Old note\n';
+    const newContent = [
+        '# Current note',
+        '',
+        'Keep current user content.',
+        '',
+        '## Directory Tree',
+        '',
+        '```file-pilot-tree',
+        'Stale/',
+        '```',
+    ].join('\n');
+
+    const { service, contents, calls, stateCalls } = createFixture({
+        projectName: 'Project B',
+        previousProjectName: 'Project A',
+        files: [
+            { path: 'Project A.md', content: oldContent },
+            { path: 'Project B.md', content: newContent },
+        ],
+    });
+
+    const result = await service.syncPortalNote();
+
+    assert.equal(result.changed, true);
+    assert.equal(contents.get('Project A.md'), oldContent);
+    assert.match(contents.get('Project B.md'), /Keep current user content/);
+    assert.doesNotMatch(contents.get('Project B.md'), /Stale\//);
+    assert.equal(calls.renamed.length, 0);
+    assert.equal(calls.created.length, 0);
+    assert.equal(calls.processed.length, 1);
+    assert.equal(calls.processed[0].path, 'Project B.md');
+    assert.equal(stateCalls.clearedPreviousProjectName, 1);
+});
+
+test('creates the new Portal Note when neither previous nor current note exists', async () => {
+    const { service, contents, calls, stateCalls } = createFixture({
+        projectName: 'Project B',
+        previousProjectName: 'Project A',
+    });
+
+    const result = await service.syncPortalNote();
+
+    assert.equal(result.changed, true);
+    assert.ok(contents.has('Project B.md'));
+    assert.equal(calls.created.length, 1);
+    assert.equal(calls.renamed.length, 0);
+    assert.equal(stateCalls.clearedPreviousProjectName, 1);
+});
+
+test('updates the current note when the previous Portal Note is missing', async () => {
+    const currentContent = '# Current note\n';
+    const { service, contents, calls, stateCalls } = createFixture({
+        projectName: 'Project B',
+        previousProjectName: 'Project A',
+        files: [{ path: 'Project B.md', content: currentContent }],
+    });
+
+    const result = await service.syncPortalNote();
+
+    assert.equal(result.changed, true);
+    assert.equal(calls.renamed.length, 0);
+    assert.equal(calls.processed.length, 1);
+    assert.equal(stateCalls.clearedPreviousProjectName, 1);
+    assert.ok(contents.has('Project B.md'));
 });
 
 test('reports a path occupied by a folder without creating or updating a note', async () => {

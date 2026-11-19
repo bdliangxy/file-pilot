@@ -197,7 +197,9 @@ export default class FilePilotPlugin extends Plugin {
 			'spline-pointer',
 			t('filePilotRibbonTooltip'),
 			() => {
-				void this.activateFilePilotView();
+				void this.activateFilePilotView().catch((error: unknown) => {
+					console.error('Failed to activate File Pilot view', error);
+				});
 			},
 		);
 
@@ -321,6 +323,7 @@ export default class FilePilotPlugin extends Plugin {
 			this.rebuildFileReferenceIndex();
 
 			this.refreshViewRootPath();
+			this.refreshViewProjectName();
 			this.refreshViewFileList();
 			this.applyShadowNotesVisibility();
 		} finally {

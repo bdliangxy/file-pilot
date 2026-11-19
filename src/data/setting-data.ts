@@ -3,6 +3,7 @@ import type { FileScope } from "../core/file-interface";
 export interface SettingData {
 	fileScope: FileScope;
 	projectName: string;
+	previousProjectName: string | null;
 	hideShadowNotesFlag: boolean;
 }
 export const MAX_PROJECT_NAME_LENGTH = 30;
@@ -24,5 +25,6 @@ export const DEFAULT_SETTINGS: SettingData = {
 		watchEnabled: true,
 	},
 	projectName: '',
+	previousProjectName: null,
 	hideShadowNotesFlag: true,
 };

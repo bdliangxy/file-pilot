@@ -118,6 +118,9 @@ export class PluginStateService {
 	getProjectName(): string {
 		return this.getData().settingData.projectName;
 	}
+	getPreviousProjectName(): string | null {
+		return this.getData().settingData.previousProjectName;
+	}
 	getHideShadowNotesFlag(): boolean {
 		return this.getData().settingData.hideShadowNotesFlag;
 	}
@@ -129,6 +132,21 @@ export class PluginStateService {
 	}
 	getFileRecordCount(): number {
 		return this.getData().pluginData.fileRecords.length;
+	}
+	async clearPreviousProjectName(): Promise<void> {
+		return this.enqueueRegularMutation(async () => {
+			const currentData = this.getData();
+
+			if (currentData.settingData.previousProjectName === null) {
+				return;
+			}
+
+			const nextData = structuredClone(currentData);
+
+			nextData.settingData.previousProjectName = null;
+
+			await this.save(nextData);
+		});
 	}
 	async addFileRecords(records: FileRecord[]): Promise<void> {
 		if (records.length === 0) {
@@ -285,8 +303,14 @@ export class PluginStateService {
 					result.errors.projectName =
 						new Error('Invalid project name');
 				} else if (
-					newName !== (currentData.settingData.projectName)
+					newName !== currentData.settingData.projectName
 				) {
+					// Preserve the first project name until Portal Note synchronization completes.
+					if (currentData.settingData.previousProjectName === null) {
+						nextData.settingData.previousProjectName =
+							currentData.settingData.projectName;
+					}
+
 					nextData.settingData.projectName = newName;
 					result.updated.push('projectName');
 				}

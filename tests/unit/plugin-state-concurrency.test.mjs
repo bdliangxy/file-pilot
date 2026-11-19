@@ -162,6 +162,7 @@ test('clearing blocks new regular writes, drains accepted work, and permits rese
         isClearError,
     );
     await assert.rejects(ctx.service.removeFileRecord(record.id), isClearError);
+    await assert.rejects(ctx.service.clearPreviousProjectName(), isClearError);
     await assert.rejects(
         ctx.service.updateSettings({ ignorePatterns: ['blocked/'] }),
         isClearError,
