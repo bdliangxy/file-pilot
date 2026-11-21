@@ -11,7 +11,8 @@ export type FilePilotErrorCode =
 	| 'SOURCE_FILE_NOT_FOUND'
 	| "FILE_REFERENCE_NOT_FOUND"
 	| 'PORTAL_NOTE_PATH_OCCUPIED'
-	| 'PORTAL_NOTE_NOT_FOUND';
+	| 'PORTAL_NOTE_NOT_FOUND'
+	| 'PORTAL_NOTE_MULTIPLE_TREE_BLOCKS';
 
 export class FilePilotError extends Error {
 	constructor(

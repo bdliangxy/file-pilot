@@ -121,4 +121,6 @@ export const en = {
 	portalNoteNotFound:
 		`Portal Note does not exist. Please click ${syncButtonName} first.`,
 	portalNoteCreated: 'Portal Note created',
+	portalNoteMultipleTreeBlocks:
+		'Multiple file-pilot-tree code blocks were found in the Directory Tree section. Keep only one and try again.',
 } as const;

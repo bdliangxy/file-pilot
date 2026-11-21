@@ -12,6 +12,7 @@ const {
 	insertMarkdownBlock,
 	replaceFirstParagraph,
 	replacePortalTreeFence,
+	updatePortalTreeSummary,
 } = await jiti.import('../../src/utils/shadow-note-utils.ts');
 
 test('generates Shadow Note names using parent folders', () => {
@@ -574,5 +575,158 @@ test('normalizes repeated spaces, tabs, and line breaks in extracted File Summar
     assert.equal(
         extractFirstParagraphFromHeading(content, 'File Summary'),
         'First part with spaces and a second line.',
+    );
+});
+
+
+const TREE_BRANCH = String.fromCharCode(0x251c, 0x2500, 0x2500);
+const TREE_LAST = String.fromCharCode(0x2514, 0x2500, 0x2500);
+
+test('updates only the matching reference in the Directory Tree block', () => {
+    const reference = '|||@AAAAAAAAAAAA|||';
+    const otherReference = '|||@BBBBBBBBBBBB|||';
+    const tree = [
+        'Project/',
+        TREE_BRANCH + ' ' + otherReference + '  # Keep',
+        TREE_LAST + ' ' + reference + '  # Old summary',
+    ].join('\n');
+    const block = portalTreeFence(tree);
+    const content = [
+        '## Directory Tree',
+        '',
+        block,
+        '',
+        '### User Notes',
+        '',
+        'Keep this note.',
+        '',
+        '## Other Section',
+        '',
+        portalTreeFence('Other/\n' + TREE_LAST + ' ' + reference, '~~~'),
+    ].join('\n');
+
+    const updated = updatePortalTreeSummary(
+        content, 'Directory Tree', reference, 'New summary',
+    );
+
+    assert.equal(
+        updated,
+        content.replace(
+            reference + '  # Old summary',
+            reference + '  # New summary',
+        ),
+    );
+});
+
+test('adds an annotation to a node without one', () => {
+    const reference = '|||@AAAAAAAAAAAA|||';
+    const content = [
+        '## Directory Tree',
+        '',
+        portalTreeFence('Project/\n' + TREE_LAST + ' ' + reference),
+    ].join('\n');
+
+    assert.equal(
+        updatePortalTreeSummary(content, 'Directory Tree', reference, 'Summary'),
+        content.replace(reference, reference + '  # Summary'),
+    );
+});
+
+test('removes an annotation when the summary is null or empty', () => {
+    const reference = '|||@AAAAAAAAAAAA|||';
+    const content = [
+        '## Directory Tree',
+        '',
+        portalTreeFence('Project/\n' + TREE_LAST + ' ' + reference + '  # Old'),
+    ].join('\n');
+
+    for (const summary of [null, '']) {
+        assert.equal(
+            updatePortalTreeSummary(content, 'Directory Tree', reference, summary),
+            content.replace(reference + '  # Old', reference),
+        );
+    }
+});
+
+test('does not update references outside the Directory Tree section', () => {
+    const reference = '|||@AAAAAAAAAAAA|||';
+    const content = [
+        '## Other Section',
+        '',
+        portalTreeFence('Project/\n' + TREE_LAST + ' ' + reference),
+        '',
+        '## Directory Tree',
+        '',
+        'No managed tree.',
+    ].join('\n');
+
+    assert.equal(
+        updatePortalTreeSummary(content, 'Directory Tree', reference, 'Summary'),
+        content,
+    );
+});
+
+test('rejects multiple top-level tree blocks in the Directory Tree section', () => {
+    const reference = '|||@AAAAAAAAAAAA|||';
+    const content = [
+        '## Directory Tree',
+        '',
+        portalTreeFence('First/\n' + TREE_LAST + ' ' + reference),
+        '',
+        portalTreeFence('Second/', '~~~'),
+        '',
+        '## Other Section',
+        '',
+        portalTreeFence('Outside/'),
+    ].join('\n');
+
+    assert.throws(
+        () => updatePortalTreeSummary(content, 'Directory Tree', reference, 'Summary'),
+        /Multiple File Pilot tree code blocks found/,
+    );
+});
+
+test('rejects duplicate references in the managed tree block', () => {
+    const reference = '|||@AAAAAAAAAAAA|||';
+    const tree = [
+        'Project/',
+        TREE_BRANCH + ' ' + reference,
+        TREE_LAST + ' ' + reference,
+    ].join('\n');
+    const content = [
+        '## Directory Tree',
+        '',
+        portalTreeFence(tree),
+    ].join('\n');
+
+    assert.throws(
+        () => updatePortalTreeSummary(content, 'Directory Tree', reference, 'Summary'),
+        error => error.message === 'Duplicate Portal Tree reference: ' + reference,
+    );
+});
+
+test('preserves CRLF line endings and content outside the tree line', () => {
+    const reference = '|||@AAAAAAAAAAAA|||';
+    const block = [
+        '~~~file-pilot-tree',
+        'Project/',
+        TREE_LAST + ' ' + reference + '  # Old',
+        '~~~',
+    ].join('\r\n');
+    const content = [
+        '# Overview',
+        '',
+        '## Directory Tree',
+        '',
+        block,
+        '',
+        '## Other Section',
+        '',
+        'Keep this content.',
+    ].join('\r\n');
+
+    assert.equal(
+        updatePortalTreeSummary(content, 'Directory Tree', reference, 'New'),
+        content.replace(reference + '  # Old', reference + '  # New'),
     );
 });

@@ -3,6 +3,8 @@ import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkFrontmatter from 'remark-frontmatter';
 import { toString } from 'mdast-util-to-string';
+import { formatPortalTreeSummary } from './portal-tree-utils';
+import { FilePilotError } from '../error';
 
 const markdownParser = unified()
 	.use(remarkParse)
@@ -28,6 +30,29 @@ export function generateShadowNoteName(
 		.join('_');
 
 	return `${name}.md`;
+}
+
+/**
+ * Find the unique File Pilot tree code block in a Markdown section.
+ */
+function findPortalTreeBlock(section: string) {
+	const nodes = markdownParser.parse(section).children;
+
+	const treeBlocks = nodes.filter(
+		node =>
+			node.type === 'code' &&
+			node.lang === 'file-pilot-tree',
+	);
+
+	// Never guess which block to select.
+	if (treeBlocks.length > 1) {
+		throw new FilePilotError(
+			'PORTAL_NOTE_MULTIPLE_TREE_BLOCKS',
+			'Multiple File Pilot tree code blocks found',
+		);
+	}
+
+	return treeBlocks[0];
 }
 
 export function extractFirstParagraphFromHeading(
@@ -319,22 +344,7 @@ export function replacePortalTreeFence(
 	oldSection: string,
 	newTreeBlock: string,
 ): string {
-	const nodes = markdownParser.parse(oldSection).children;
-
-	const treeBlocks = nodes.filter(
-		node =>
-			node.type === 'code' &&
-			node.lang === 'file-pilot-tree',
-	);
-
-	// Never guess which block to replace.
-	if (treeBlocks.length > 1) {
-		throw new Error(
-			'Multiple File Pilot tree code blocks found',
-		);
-	}
-
-	const target = treeBlocks[0];
+	const target = findPortalTreeBlock(oldSection);
 
 	// Insert a tree block when the section has none.
 	if (!target) {
@@ -357,5 +367,141 @@ export function replacePortalTreeFence(
 		oldSection.slice(0, start) +
 		newTreeBlock +
 		oldSection.slice(end)
+	);
+}
+
+export function updatePortalTreeSummary(
+	content: string,
+	headingName: string,
+	reference: string,
+	summary: string | null,
+): string {
+	const nodes = markdownParser.parse(content).children;
+
+	// Find the target Directory Tree heading.
+	const heading = nodes.find(
+		node =>
+			node.type === 'heading' &&
+			node.depth === 2 &&
+			toString(node) === headingName,
+	);
+
+	if (!heading) {
+		return content;
+	}
+
+	const sectionStart = heading.position?.end.offset;
+
+	if (sectionStart === undefined) {
+		throw new Error('Missing target heading position');
+	}
+
+	// Find the end of the target section.
+	const nextHeading = nodes.find(
+		node =>
+			node.type === 'heading' &&
+			(node.position?.start.offset ?? -1) > sectionStart,
+	);
+
+	const sectionEnd =
+		nextHeading?.position?.start.offset ?? content.length;
+
+	if (sectionStart > sectionEnd) {
+		throw new Error('Invalid Markdown section range');
+	}
+
+	// Extract the target section.
+	const section = content.slice(sectionStart, sectionEnd);
+
+	// Find the unique managed tree block.
+	const treeBlock = findPortalTreeBlock(section);
+
+	if (!treeBlock) {
+		return content;
+	}
+
+	const start = treeBlock.position?.start.offset;
+	const end = treeBlock.position?.end.offset;
+
+	if (start === undefined || end === undefined) {
+		throw new Error('Missing tree code block position');
+	}
+
+	const block = section.slice(start, end);
+
+	// Preserve original line endings.
+	const parts = block.split(/(\r\n|\n|\r)/);
+
+	let targetIndex = -1;
+	let targetPrefix = '';
+
+	for (let i = 0; i < parts.length; i += 2) {
+		const line = parts[i] ?? '';
+
+		const match =
+			/^((?:│ {3}| {4})*(?:├── |└── ))(.*)$/.exec(line);
+
+		if (!match) {
+			continue;
+		}
+
+		const prefix = match[1];
+		const label = match[2];
+
+		if (
+			prefix === undefined ||
+			label === undefined
+		) {
+			continue;
+		}
+
+		if (
+			label !== reference &&
+			!label.startsWith(`${reference}  # `)
+		) {
+			continue;
+		}
+
+		if (targetIndex !== -1) {
+			throw new Error(
+				`Duplicate Portal Tree reference: ${reference}`,
+			);
+		}
+
+		targetIndex = i;
+		targetPrefix = prefix;
+	}
+
+	if (targetIndex === -1) {
+		return content;
+	}
+
+	// Apply the same length limit as full tree rendering.
+	const formattedSummary = formatPortalTreeSummary(summary);
+
+	const annotation = formattedSummary !== null
+		? `  # ${formattedSummary}`
+		: '';
+
+	const updatedLine =
+		`${targetPrefix}${reference}${annotation}`;
+
+	if (parts[targetIndex] === updatedLine) {
+		return content;
+	}
+
+	parts[targetIndex] = updatedLine;
+
+	const updatedBlock = parts.join('');
+
+	const updatedSection =
+		section.slice(0, start) +
+		updatedBlock +
+		section.slice(end);
+
+	return (
+		content.slice(0, sectionStart) +
+		updatedSection +
+		content.slice(sectionEnd)
 	);
 }

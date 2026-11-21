@@ -41,6 +41,10 @@ export function showPortalNoteFeedback(
 				new Notice(t('portalNotePathOccupied'));
 				return;
 
+			case 'PORTAL_NOTE_MULTIPLE_TREE_BLOCKS':
+				new Notice(t('portalNoteMultipleTreeBlocks'));
+				return;
+
 			default:
 				new Notice(t('portalNoteUpdateFailed'));
 				return;

@@ -120,4 +120,6 @@ export const zh = {
 	portalNoteNotFound:
 		`总览笔记不存在，请先点击${syncButtonName}创建总览笔记。`,
 	portalNoteCreated: '总览笔记已创建',
+	portalNoteMultipleTreeBlocks:
+		'Directory Tree 章节中存在多个 file-pilot-tree 代码块，请保留一个后重试。',
 } satisfies Record<keyof typeof en, string>;
