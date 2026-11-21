@@ -28,7 +28,13 @@ function makeEmitter() {
     };
 }
 
-function setup(records = [], { beforeRemove = async () => {} } = {}) {
+function setup(
+    records = [],
+    {
+        beforeRemove = async () => {},
+        readSummary = async () => null,
+    } = {},
+) {
     const vault = makeEmitter();
     const metadataCache = makeEmitter();
     let stored = [...records];
@@ -49,6 +55,7 @@ function setup(records = [], { beforeRemove = async () => {} } = {}) {
         metadataCache,
         stateService,
         () => { refreshed++; },
+        readSummary,
     );
     watcher.onload();
     return {
@@ -202,4 +209,214 @@ test('deletion loop stops after an in-flight removal when clearing begins', asyn
         releaseRemoval();
         ctx.watcher.unload();
     }
+});
+
+test('reads Summary only for watched managed notes and supports files and folders', async () => {
+    const records = [
+        { id: 'file-1', kind: 'file', shadowNotePath: 'ShadowNotes/file.md' },
+        { id: 'folder-1', kind: 'folder', shadowNotePath: 'ShadowNotes/folder.md' },
+    ];
+    const summaries = new Map([
+        ['file-1', 'Initial file summary'],
+        ['folder-1', 'Folder summary'],
+    ]);
+    const reads = [];
+    const ctx = setup(records, {
+        readSummary: async (record) => {
+            reads.push(record.id);
+            return summaries.get(record.id) ?? null;
+        },
+    });
+
+    // Existing note-path notifications remain independent of Summary subscribers.
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/file.md'));
+    await flush();
+    assert.deepEqual(reads, []);
+
+    const first = [];
+    const second = [];
+    const unsubscribeFirst = ctx.watcher.onFileSummaryChanged(change => first.push(change));
+    const unsubscribeSecond = ctx.watcher.onFileSummaryChanged(change => second.push(change));
+
+    ctx.metadataCache.emit('changed', new TFile('Other/ordinary.md'));
+    await flush();
+    assert.deepEqual(reads, []);
+
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/file.md'));
+    await flush();
+    assert.deepEqual(reads, ['file-1']);
+    assert.deepEqual(first, [{ fileId: 'file-1', summary: 'Initial file summary' }]);
+    assert.deepEqual(second, first);
+
+    // Unrelated edits to the same Shadow Note must not publish duplicate Summaries.
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/file.md'));
+    await flush();
+    assert.equal(first.length, 1);
+
+    summaries.set('file-1', 'Revised file summary');
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/file.md'));
+    await flush();
+    assert.deepEqual(first[1], { fileId: 'file-1', summary: 'Revised file summary' });
+    assert.deepEqual(second, first);
+
+    unsubscribeFirst();
+    summaries.delete('file-1');
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/file.md'));
+    await flush();
+    assert.equal(first.length, 2);
+    assert.deepEqual(second[2], { fileId: 'file-1', summary: null });
+
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/folder.md'));
+    await flush();
+    assert.deepEqual(second[3], { fileId: 'folder-1', summary: 'Folder summary' });
+
+    unsubscribeSecond();
+    summaries.set('file-1', 'Later summary');
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/file.md'));
+    await flush();
+    assert.equal(second.length, 4);
+    assert.equal(reads.length, 5);
+    ctx.watcher.unload();
+});
+
+test('first observation of an empty Summary publishes null only once', async () => {
+    const ctx = setup([{ id: 'one', shadowNotePath: 'ShadowNotes/a.md' }]);
+    const received = [];
+    ctx.watcher.onFileSummaryChanged(change => received.push(change));
+
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/a.md'));
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/a.md'));
+    await flush();
+
+    assert.deepEqual(received, [{ fileId: 'one', summary: null }]);
+    ctx.watcher.unload();
+});
+
+test('ignores an older async Summary read that resolves after a newer one', async () => {
+    let resolveFirst;
+    const firstRead = new Promise(resolve => { resolveFirst = resolve; });
+    let calls = 0;
+    const ctx = setup([{ id: 'one', shadowNotePath: 'ShadowNotes/a.md' }], {
+        readSummary: async () => ++calls === 1 ? firstRead : 'Newest',
+    });
+    const received = [];
+    ctx.watcher.onFileSummaryChanged(change => received.push(change));
+
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/a.md'));
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/a.md'));
+    await flush();
+
+    assert.equal(calls, 2);
+    assert.deepEqual(received, [{ fileId: 'one', summary: 'Newest' }]);
+
+    resolveFirst('Outdated');
+    await flush();
+    assert.deepEqual(received, [{ fileId: 'one', summary: 'Newest' }]);
+    ctx.watcher.unload();
+});
+
+test('a failing Summary subscriber does not prevent another subscriber', async () => {
+    const ctx = setup([{ id: 'one', shadowNotePath: 'ShadowNotes/a.md' }], {
+        readSummary: async () => 'Summary',
+    });
+    const received = [];
+    const originalError = console.error;
+    const errors = [];
+    console.error = (...args) => errors.push(args);
+    try {
+        ctx.watcher.onFileSummaryChanged(() => { throw new Error('subscriber failed'); });
+        ctx.watcher.onFileSummaryChanged(change => received.push(change));
+        ctx.metadataCache.emit('changed', new TFile('ShadowNotes/a.md'));
+        await flush();
+
+        assert.deepEqual(received, [{ fileId: 'one', summary: 'Summary' }]);
+        assert.equal(errors.length, 1);
+        assert.match(errors[0][0], /File Summary subscriber failed/);
+    } finally {
+        console.error = originalError;
+        ctx.watcher.unload();
+    }
+});
+
+test('a failed Summary read does not publish and a later read can recover', async () => {
+    let attempts = 0;
+    const ctx = setup([{ id: 'one', shadowNotePath: 'ShadowNotes/a.md' }], {
+        readSummary: async () => {
+            if (++attempts === 1) throw new Error('Read failed');
+            return 'Recovered';
+        },
+    });
+    const originalError = console.error;
+    const errors = [];
+    const received = [];
+    console.error = (...args) => errors.push(args);
+    try {
+        ctx.watcher.onFileSummaryChanged(change => received.push(change));
+        ctx.metadataCache.emit('changed', new TFile('ShadowNotes/a.md'));
+        await flush();
+        assert.deepEqual(received, []);
+        assert.equal(errors.length, 1);
+
+        ctx.metadataCache.emit('changed', new TFile('ShadowNotes/a.md'));
+        await flush();
+        assert.deepEqual(received, [{ fileId: 'one', summary: 'Recovered' }]);
+    } finally {
+        console.error = originalError;
+        ctx.watcher.unload();
+    }
+});
+
+test('does not publish an in-flight Summary when clearing or deletion intervenes', async () => {
+    let resolveClearing;
+    const clearingRead = new Promise(resolve => { resolveClearing = resolve; });
+    const clearingCtx = setup([{ id: 'one', shadowNotePath: 'ShadowNotes/a.md' }], {
+        readSummary: async () => clearingRead,
+    });
+    const clearingEvents = [];
+    clearingCtx.watcher.onFileSummaryChanged(change => clearingEvents.push(change));
+    clearingCtx.metadataCache.emit('changed', new TFile('ShadowNotes/a.md'));
+    clearingCtx.setClearing(true);
+    resolveClearing('Ignored while clearing');
+    await flush();
+    assert.deepEqual(clearingEvents, []);
+    clearingCtx.watcher.unload();
+
+    let resolveDeleted;
+    const deletionRead = new Promise(resolve => { resolveDeleted = resolve; });
+    let reads = 0;
+    const deletionCtx = setup([{ id: 'one', shadowNotePath: 'ShadowNotes/a.md' }], {
+        readSummary: async () => { reads++; return deletionRead; },
+    });
+    const deletionEvents = [];
+    deletionCtx.watcher.onFileSummaryChanged(change => deletionEvents.push(change));
+
+    deletionCtx.metadataCache.emit('changed', new TFile('ShadowNotes/a.md'));
+    deletionCtx.vault.emit('delete', new TFile('ShadowNotes/a.md'));
+    await deletionCtx.watcher.waitForPendingDeletions();
+    resolveDeleted('Deleted record');
+    await flush();
+
+    assert.deepEqual(deletionEvents, []);
+    assert.deepEqual(deletionCtx.records, []);
+    deletionCtx.metadataCache.emit('changed', new TFile('ShadowNotes/a.md'));
+    await flush();
+    assert.equal(reads, 1);
+    deletionCtx.watcher.unload();
+});
+
+test('unloading the watcher prevents pending Summary reads from notifying listeners', async () => {
+    let finishRead;
+    const read = new Promise(resolve => { finishRead = resolve; });
+    const ctx = setup([{ id: 'one', shadowNotePath: 'ShadowNotes/a.md' }], {
+        readSummary: async () => read,
+    });
+    const received = [];
+    ctx.watcher.onFileSummaryChanged(change => received.push(change));
+    ctx.metadataCache.emit('changed', new TFile('ShadowNotes/a.md'));
+
+    ctx.watcher.unload();
+    finishRead('Too late');
+    await flush();
+    assert.deepEqual(received, []);
+    assert.equal(ctx.metadataCache.count('changed'), 0);
 });

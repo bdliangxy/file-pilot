@@ -84,9 +84,10 @@ export default class FilePilotPlugin extends Plugin {
 			this.app.metadataCache,
 			this.stateService,
 			() => {
-				this.refreshViewFileList()
+				this.refreshViewFileList();
 				this.rebuildFileReferenceIndex();
 			},
+			(record) => this.shadowNoteService.getFileSummary(record),
 		);
 
 		this.addChild(this.shadowNoteWatcher);

@@ -75,11 +75,11 @@ export class FilePilotView extends ItemView {
 	private filterCriteria: FileFilterCriteria = {
 		status: 'all',
 	};
-	// Maps Shadow Note paths to their corresponding File Item UI elements.
-	private readonly mapNotePathItemState =
+	// Maps stable FileRecord IDs to their File Item UI elements.
+	private readonly mapFileIdItemState =
 		new Map<string, FileItemState>();
-	// Unsubscribes from Shadow Note content change notifications.
-	private unsubscribeNoteChanged: (() => void) | null = null;
+
+	private unsubscribeSummaryChanged: (() => void) | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -283,19 +283,25 @@ export class FilePilotView extends ItemView {
 			cls: 'file-pilot-files-section',
 		});
 
-		// Subscribe to Shadow Note content changes.
-		if (!this.unsubscribeNoteChanged) {
-			this.unsubscribeNoteChanged =
-				this.filePilot.shadowNoteWatcher.onNoteChanged(
-					(notePath) => {
-						const item =
-							this.mapNotePathItemState.get(notePath);
+		// Subscribe to actual File Summary changes.
+		if (!this.unsubscribeSummaryChanged) {
+			this.unsubscribeSummaryChanged =
+				this.filePilot.shadowNoteWatcher.onFileSummaryChanged(
+					({ fileId, summary }) => {
+						const item = this.mapFileIdItemState.get(fileId);
 
-						if (!item) {
+						if (
+							!item ||
+							item.isEditing ||
+							!item.secondaryEl.isConnected
+						) {
 							return;
 						}
 
-						void this.updateFileSummary(item);
+						// Invalidate pending asynchronous display reads.
+						++item.summaryUpdateVersion;
+
+						this.renderFileSummary(item, summary);
 					},
 				);
 		}
@@ -305,10 +311,10 @@ export class FilePilotView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
-		this.unsubscribeNoteChanged?.();
-		this.unsubscribeNoteChanged = null;
+		this.unsubscribeSummaryChanged?.();
+		this.unsubscribeSummaryChanged = null;
 
-		this.mapNotePathItemState.clear();
+		this.mapFileIdItemState.clear();
 		this.rootSetting = null;
 		this.fileCountEl = null;
 		this.filesSectionEl = null;
@@ -388,7 +394,7 @@ export class FilePilotView extends ItemView {
 		const previousScrollTop = listEl.scrollTop;
 
 		// Discard references to previously rendered items.
-		this.mapNotePathItemState.clear();
+		this.mapFileIdItemState.clear();
 
 		// Clear previously rendered items.
 		listEl.empty();
@@ -483,8 +489,8 @@ export class FilePilotView extends ItemView {
 			inputEl: null,
 		};
 
-		this.mapNotePathItemState.set(
-			record.shadowNotePath,
+		this.mapFileIdItemState.set(
+			record.id,
 			fileItemState,
 		);
 
@@ -569,6 +575,7 @@ export class FilePilotView extends ItemView {
 		if (item.isEditing) {
 			return;
 		}
+
 		const summaryUpdateVersion = ++item.summaryUpdateVersion;
 
 		try {
@@ -581,38 +588,33 @@ export class FilePilotView extends ItemView {
 				item.isEditing ||
 				summaryUpdateVersion !== item.summaryUpdateVersion ||
 				!item.secondaryEl.isConnected ||
-				this.mapNotePathItemState.get(
-					item.record.shadowNotePath
-				) !== item
+				this.mapFileIdItemState.get(item.record.id) !== item
 			) {
 				return;
 			}
 
-			if (summary) {
-				item.secondaryEl.removeClass(
-					'file-pilot-file-path',
-				);
-				item.secondaryEl.addClass(
-					'file-pilot-file-summary',
-				);
-				item.secondaryEl.setText(summary);
-			} else {
-				item.secondaryEl.removeClass(
-					'file-pilot-file-summary',
-				);
-				item.secondaryEl.addClass(
-					'file-pilot-file-path',
-				);
-				item.secondaryEl.setText(
-					item.absolutePath,
-				);
-			}
+			this.renderFileSummary(item, summary);
 		} catch (error) {
 			console.error(
 				'File Pilot failed to update file summary:',
 				item.record.shadowNotePath,
 				error,
 			);
+		}
+	}
+
+	private renderFileSummary(
+		item: FileItemState,
+		summary: string | null,
+	): void {
+		if (summary) {
+			item.secondaryEl.removeClass('file-pilot-file-path');
+			item.secondaryEl.addClass('file-pilot-file-summary');
+			item.secondaryEl.setText(summary);
+		} else {
+			item.secondaryEl.removeClass('file-pilot-file-summary');
+			item.secondaryEl.addClass('file-pilot-file-path');
+			item.secondaryEl.setText(item.absolutePath);
 		}
 	}
 
@@ -659,9 +661,7 @@ export class FilePilotView extends ItemView {
 			if (
 				!item.isEditing ||
 				!item.secondaryEl.isConnected ||
-				this.mapNotePathItemState.get(
-					item.record.shadowNotePath,
-				) !== item
+				this.mapFileIdItemState.get(item.record.id) !== item
 			) {
 				return;
 			}
@@ -765,19 +765,9 @@ export class FilePilotView extends ItemView {
 		item.inputEl = null;
 		item.draft = '';
 
-		const secondaryEl = item.secondaryEl;
+		item.secondaryEl.removeClass('file-pilot-file-editing');
 
-		secondaryEl.removeClass('file-pilot-file-editing');
-
-		if (summary) {
-			secondaryEl.removeClass('file-pilot-file-path');
-			secondaryEl.addClass('file-pilot-file-summary');
-			secondaryEl.setText(summary);
-		} else {
-			secondaryEl.removeClass('file-pilot-file-summary');
-			secondaryEl.addClass('file-pilot-file-path');
-			secondaryEl.setText(item.absolutePath);
-		}
+		this.renderFileSummary(item, summary);
 
 		// Reconcile the display with the latest Shadow Note content.
 		void this.updateFileSummary(item);

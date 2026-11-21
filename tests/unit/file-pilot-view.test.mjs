@@ -32,7 +32,7 @@ function setup(summaryReader = async () => null) {
     const app = {};
     const plugin = {
         shadowNoteWatcher: {
-            onNoteChanged(callback) {
+            onFileSummaryChanged(callback) {
                 subscribed++;
                 listeners.add(callback);
                 return () => {
@@ -77,9 +77,9 @@ function setup(summaryReader = async () => null) {
     };
     return {
         view, record, find,
-        emit: (path) => {
+        emit: (change) => {
             for (const callback of listeners) {
-                callback(path);
+                callback(change);
             }
         },
         setIgnorePatterns: (patterns) => { ignorePatterns = [...patterns]; },
@@ -166,23 +166,23 @@ function makeQueryRecords() {
     ];
 }
 
-test('renders the summary and refreshes only for the matching Shadow Note', async () => {
-    let summary = 'Initial summary';
-    const ui = setup(async () => summary);
+test('initial loading reads Summary, while change events render without rereading', async () => {
+    const ui = setup(async () => 'Initial summary');
     await ui.view.onOpen();
     await flush();
+
     const secondary = ui.find('file-pilot-file-secondary');
     assert.equal(secondary.text, 'Initial summary');
     assert.ok(secondary.classes.has('file-pilot-file-summary'));
-
-    summary = 'Updated summary';
-    ui.emit('Unrelated/note.md');
-    await flush();
     assert.equal(ui.reads, 1);
-    ui.emit(ui.record.shadowNotePath);
-    await flush();
+
+    ui.emit({ fileId: 'unrelated-record', summary: 'Unrelated summary' });
+    assert.equal(secondary.text, 'Initial summary');
+
+    ui.emit({ fileId: ui.record.id, summary: 'Updated summary' });
     assert.equal(secondary.text, 'Updated summary');
-    assert.equal(ui.reads, 2);
+    assert.equal(ui.reads, 1);
+    assert.ok(secondary.classes.has('file-pilot-file-summary'));
     await ui.view.onClose();
 });
 
@@ -193,25 +193,26 @@ test('removing a summary restores the absolute path and its CSS class', async ()
     await flush();
     const secondary = ui.find('file-pilot-file-secondary');
     summary = null;
-    ui.emit(ui.record.shadowNotePath);
-    await flush();
+    ui.emit({ fileId: ui.record.id, summary: null });
+    assert.equal(ui.reads, 1);
     assert.equal(secondary.text.replaceAll('\\', '/'), 'C:/files/docs/report.pdf');
     assert.ok(secondary.classes.has('file-pilot-file-path'));
     assert.ok(!secondary.classes.has('file-pilot-file-summary'));
     await ui.view.onClose();
 });
 
-test('outdated summary reads cannot overwrite a newer result', async () => {
+test('a pending initial Summary read cannot overwrite a newer change event', async () => {
     const pending = deferred();
-    let count = 0;
-    const ui = setup(() => ++count === 1 ? pending.promise : Promise.resolve('Newest'));
+    const ui = setup(() => pending.promise);
+
     await ui.view.onOpen();
-    ui.emit(ui.record.shadowNotePath);
-    await flush();
+    ui.emit({ fileId: ui.record.id, summary: 'Newest' });
     assert.equal(ui.find('file-pilot-file-secondary').text, 'Newest');
+
     pending.resolve('Stale');
     await flush();
     assert.equal(ui.find('file-pilot-file-secondary').text, 'Newest');
+    assert.equal(ui.reads, 1);
     await ui.view.onClose();
 });
 
@@ -224,7 +225,7 @@ test('closes and reopens without accumulating watcher subscriptions', async () =
     assert.equal(ui.unsubscribed, 1);
     assert.equal(ui.activeSubscriptions, 0);
     const before = ui.reads;
-    ui.emit(ui.record.shadowNotePath);
+    ui.emit({ fileId: ui.record.id, summary: 'After closing' });
     await flush();
     assert.equal(ui.reads, before);
     await ui.view.onOpen();
@@ -592,7 +593,7 @@ test('inline summary editor creates a summary with Enter and saves only once on 
     await ui.view.onOpen();
     await flush();
 
-    const item = ui.view.mapNotePathItemState.get(ui.record.shadowNotePath);
+    const item = ui.view.mapFileIdItemState.get(ui.record.id);
     await ui.view.startSummaryEdit(item);
 
     const input = item.inputEl;
@@ -623,7 +624,7 @@ test('inline summary editor saves on blur and skips writes when unchanged', asyn
 
     await ui.view.onOpen();
     await flush();
-    const item = ui.view.mapNotePathItemState.get(ui.record.shadowNotePath);
+    const item = ui.view.mapFileIdItemState.get(ui.record.id);
 
     await ui.view.startSummaryEdit(item);
     assert.equal(item.inputEl.value, 'Existing summary');
@@ -650,7 +651,7 @@ test('Escape cancels summary changes without saving on subsequent blur', async (
 
     await ui.view.onOpen();
     await flush();
-    const item = ui.view.mapNotePathItemState.get(ui.record.shadowNotePath);
+    const item = ui.view.mapFileIdItemState.get(ui.record.id);
     await ui.view.startSummaryEdit(item);
     const input = item.inputEl;
 
@@ -663,5 +664,47 @@ test('Escape cancels summary changes without saving on subsequent blur', async (
     assert.deepEqual(writes, []);
     assert.equal(item.isEditing, false);
     assert.equal(ui.find('file-pilot-file-secondary').text, 'Original summary');
+    await ui.view.onClose();
+});
+
+test('Summary change events do not overwrite an active inline editor', async () => {
+    let storedSummary = 'Before editing';
+    const ui = setup(async () => storedSummary);
+    await ui.view.onOpen();
+    await flush();
+
+    const item = ui.view.mapFileIdItemState.get(ui.record.id);
+    await ui.view.startSummaryEdit(item);
+    item.inputEl.value = 'Uncommitted draft';
+    item.inputEl.dispatch('input');
+
+    storedSummary = 'Changed externally';
+    ui.emit({ fileId: ui.record.id, summary: storedSummary });
+    assert.equal(item.inputEl.value, 'Uncommitted draft');
+    assert.equal(item.isEditing, true);
+
+    // Cancelling reloads the latest stored content rather than keeping a stale draft.
+    ui.view.cancelSummaryEdit(item);
+    await flush();
+    assert.equal(item.isEditing, false);
+    assert.equal(item.secondaryEl.text, 'Changed externally');
+    await ui.view.onClose();
+});
+
+test('Summary events target the current FileRecord ID after a list rerender', async () => {
+    const ui = setup(async () => null);
+    await ui.view.onOpen();
+    await flush();
+
+    const oldItem = ui.view.mapFileIdItemState.get(ui.record.id);
+    ui.view.refreshFileList();
+    await flush();
+    const newItem = ui.view.mapFileIdItemState.get(ui.record.id);
+    assert.notEqual(newItem, oldItem);
+
+    const reads = ui.reads;
+    ui.emit({ fileId: ui.record.id, summary: 'Latest after rerender' });
+    assert.equal(ui.find('file-pilot-file-secondary').text, 'Latest after rerender');
+    assert.equal(ui.reads, reads);
     await ui.view.onClose();
 });
