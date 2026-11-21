@@ -93,6 +93,7 @@ function createFixture({
     files = [],
     folders = [],
     formatFileReference,
+    getFileSummary = async () => null,
 } = {}) {
     const { vault, contents, calls } = createFakeVault({ files, folders });
     const referenceCalls = [];
@@ -125,6 +126,7 @@ function createFixture({
         { vault },
         stateService,
         referenceService,
+        { getFileSummary },
     );
 
     return {
@@ -396,3 +398,134 @@ test('propagates a missing FileRecord reference before changing the Portal Note'
     assert.equal(calls.processed.length, 0);
 });
 
+
+test('creates an annotated Portal Tree using summaries for files and managed folders', async () => {
+    const folder = {
+        ...makeFileRecord('folder-1', { path: 'Docs' }),
+        kind: 'folder',
+    };
+    const file = makeFileRecord('file-1', { path: 'Docs/report.pdf' });
+    const summaries = new Map([
+        ['folder-1', 'Folder description'],
+        ['file-1', 'File description'],
+    ]);
+    const calls = [];
+    const fixture = createFixture({
+        records: [file, folder],
+        getFileSummary: async (record) => {
+            calls.push(record.id);
+            return summaries.get(record.id) ?? null;
+        },
+    });
+
+    const result = await fixture.service.syncPortalNote();
+    const content = fixture.contents.get('My Project.md');
+
+    assert.equal(result.changed, true);
+    assert.deepEqual(calls, ['file-1', 'folder-1']);
+    assert.ok(content.includes('|||!folder-1|||  # Folder description'));
+    assert.ok(content.includes('|||!file-1|||  # File description'));
+});
+
+test('refreshes changed annotations and removes cleared ones on full synchronization', async () => {
+    const record = makeFileRecord('file-1');
+    let summary = 'Original summary';
+    const fixture = createFixture({
+        records: [record],
+        getFileSummary: async () => summary,
+    });
+
+    assert.deepEqual(await fixture.service.syncPortalNote(), { changed: true });
+    assert.ok(fixture.contents.get('My Project.md').includes(
+        '|||!file-1|||  # Original summary',
+    ));
+
+    summary = 'Changed summary';
+    assert.deepEqual(await fixture.service.syncPortalNote(), { changed: true });
+    assert.ok(fixture.contents.get('My Project.md').includes(
+        '|||!file-1|||  # Changed summary',
+    ));
+    assert.ok(!fixture.contents.get('My Project.md').includes('Original summary'));
+
+    assert.deepEqual(await fixture.service.syncPortalNote(), { changed: false });
+
+    summary = null;
+    assert.deepEqual(await fixture.service.syncPortalNote(), { changed: true });
+    const content = fixture.contents.get('My Project.md');
+    assert.ok(content.includes('|||!file-1|||'));
+    assert.ok(!content.includes('  # Changed summary'));
+});
+
+test('does not create or overwrite the Portal Note when Summary reading fails', async () => {
+    const record = makeFileRecord('file-1');
+    const error = new Error('Shadow Note read failed');
+    const existingContent = '## Directory Tree\n\n```file-pilot-tree\nOriginal/\n```\n';
+    const fixture = createFixture({
+        records: [record],
+        files: [{ path: 'My Project.md', content: existingContent }],
+        getFileSummary: async () => { throw error; },
+    });
+
+    await assert.rejects(fixture.service.syncPortalNote(), failure => failure === error);
+    assert.equal(fixture.contents.get('My Project.md'), existingContent);
+    assert.equal(fixture.calls.created.length, 0);
+    assert.equal(fixture.calls.processed.length, 0);
+    assert.equal(fixture.calls.renamed.length, 0);
+});
+
+test('does not update the Portal Note when any one of multiple Summary reads fails', async () => {
+    const records = [
+        makeFileRecord('file-1', { path: 'a.txt' }),
+        makeFileRecord('file-2', { path: 'b.txt' }),
+    ];
+    const error = new Error('Cannot read second file');
+    const fixture = createFixture({
+        records,
+        getFileSummary: async (record) => {
+            if (record.id === 'file-2') throw error;
+            return 'First summary';
+        },
+    });
+
+    await assert.rejects(fixture.service.syncPortalNote(), failure => failure === error);
+    assert.equal(fixture.calls.created.length, 0);
+    assert.equal(fixture.calls.processed.length, 0);
+});
+
+test('does not modify user Markdown outside the tree when summaries change', async () => {
+    const record = makeFileRecord('file-1');
+    const original = [
+        '# User introduction',
+        '',
+        'Keep this text.',
+        '',
+        '## Directory Tree',
+        '',
+        'User notes above fence.',
+        '',
+        '```file-pilot-tree',
+        'Old/',
+        '```',
+        '',
+        'User notes below fence.',
+        '',
+        '## Personal',
+        '',
+        'Keep this section.',
+        '',
+    ].join('\n');
+    const fixture = createFixture({
+        records: [record],
+        files: [{ path: 'My Project.md', content: original }],
+        getFileSummary: async () => 'Latest summary',
+    });
+
+    await fixture.service.syncPortalNote();
+    const updated = fixture.contents.get('My Project.md');
+
+    assert.ok(updated.includes('|||!file-1|||  # Latest summary'));
+    assert.ok(updated.includes('Keep this text.'));
+    assert.ok(updated.includes('User notes above fence.'));
+    assert.ok(updated.includes('User notes below fence.'));
+    assert.ok(updated.includes('## Personal\n\nKeep this section.'));
+});

@@ -17,6 +17,8 @@ import {
 
 import { FilePilotError } from '../error';
 
+import { ShadowNoteService } from './shadow-note-service';
+
 export interface PortalNoteSyncResult {
 	changed: boolean;
 }
@@ -28,6 +30,7 @@ export class PortalNoteService {
 		private readonly app: App,
 		private readonly stateService: PluginStateService,
 		private readonly referenceService: FileReferenceService,
+		private readonly shadowNoteService: ShadowNoteService,
 	) { }
 
 
@@ -54,9 +57,22 @@ export class PortalNoteService {
 
 		const tree = buildPortalTree(records, rootName);
 
+		// Read the latest File Summaries from Shadow Notes.
+		const summariesById = new Map<string, string | null>();
+
+		await Promise.all(
+			records.map(async (record) => {
+				const summary =
+					await this.shadowNoteService.getFileSummary(record);
+
+				summariesById.set(record.id, summary);
+			}),
+		);
+
 		const treeText = renderPortalTree(
 			tree,
 			(id) => this.referenceService.formatFileReference(id),
+			summariesById,
 		);
 
 		const treeBlock = [

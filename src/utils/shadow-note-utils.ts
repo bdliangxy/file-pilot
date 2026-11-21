@@ -68,7 +68,7 @@ export function extractFirstParagraphFromHeading(
 
 		// Extract plain text from the paragraph.
 		const paragraph = toString(node)
-			.replace(/\r?\n/g, ' ')
+			.replace(/\s+/g, ' ')
 			.trim();
 
 		if (paragraph) {

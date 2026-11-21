@@ -104,10 +104,31 @@ export function buildPortalTree(
 	return root;
 }
 
+const MAX_PORTAL_SUMMARY_LENGTH = 80;
+
+export function formatPortalTreeSummary(
+	summary: string | null,
+): string | null {
+	if (!summary) {
+		return null;
+	}
+
+	const characters = Array.from(summary);
+
+	if (characters.length <= MAX_PORTAL_SUMMARY_LENGTH) {
+		return summary;
+	}
+
+	return (
+		characters.slice(0, MAX_PORTAL_SUMMARY_LENGTH - 1).join('') +
+		'…'
+	);
+}
 
 export function renderPortalTree(
 	tree: PortalTreeNode,
 	formatReference: (id: string) => string | null,
+	summariesById: ReadonlyMap<string, string | null>,
 ): string {
 	const lines: string[] = [
 		/[\\/]$/.test(tree.name)
@@ -142,6 +163,16 @@ export function renderPortalTree(
 				label = node.kind === "folder"
 					? `${node.name}${path.sep}`
 					: node.name;
+			}
+
+			if (node.record !== null) {
+				const summary = formatPortalTreeSummary(
+					summariesById.get(node.record.id) ?? null,
+				);
+
+				if (summary !== null) {
+					label += `  # ${summary}`;
+				}
 			}
 
 			lines.push(`${prefix}${branch}${label}`);

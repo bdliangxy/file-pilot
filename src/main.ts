@@ -65,6 +65,7 @@ export default class FilePilotPlugin extends Plugin {
 			this.app,
 			this.stateService,
 			this.fileReferenceService,
+			this.shadowNoteService,
 		);
 		this.fileActionService = new FileActionService(
 			this.app,

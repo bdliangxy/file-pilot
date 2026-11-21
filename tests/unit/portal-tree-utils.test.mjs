@@ -8,7 +8,7 @@ import {
 } from '../factories/file-record.mjs';
 
 const jiti = createJiti(import.meta.url);
-const { buildPortalTree, renderPortalTree } = await jiti.import(
+const { buildPortalTree, renderPortalTree, formatPortalTreeSummary } = await jiti.import(
     '../../src/utils/portal-tree-utils.ts',
 );
 
@@ -194,13 +194,13 @@ function referenceFor(id) {
 test('renders an empty tree with the native root separator', () => {
     const tree = buildPortalTree([], 'MyProject');
 
-    assert.equal(renderPortalTree(tree, referenceFor), `MyProject${path.sep}`);
+    assert.equal(renderPortalTree(tree, referenceFor, new Map()), `MyProject${path.sep}`);
 });
 
 test('does not append a second root separator', () => {
     for (const separator of ['/', '\\']) {
         const tree = buildPortalTree([], `MyProject${separator}`);
-        assert.equal(renderPortalTree(tree, referenceFor), `MyProject${separator}`);
+        assert.equal(renderPortalTree(tree, referenceFor, new Map()), `MyProject${separator}`);
     }
 });
 
@@ -216,6 +216,7 @@ test('renders mixed multi-level branches and uses references for real records', 
     const rendered = renderPortalTree(
         buildPortalTree(records, 'MyProject'),
         referenceFor,
+        new Map(),
     );
 
     assert.equal(rendered, [
@@ -236,6 +237,7 @@ test('formats a real folder only as a reference without an extra separator', () 
     const result = renderPortalTree(
         buildPortalTree([folder], 'Project'),
         formatReference,
+        new Map(),
     );
 
     assert.equal(result, [
@@ -256,6 +258,7 @@ test('renders implicit parent folders with native separators and no fake referen
             calls.push(id);
             return referenceFor(id);
         },
+        new Map(),
     );
 
     assert.equal(rendered, [
@@ -271,7 +274,7 @@ test('renders an empty real folder as a single reference line', () => {
     const folder = makeFolderRecord('empty-folder', 'Empty');
 
     assert.equal(
-        renderPortalTree(buildPortalTree([folder], 'Project'), referenceFor),
+        renderPortalTree(buildPortalTree([folder], 'Project'), referenceFor, new Map()),
         [`Project${path.sep}`, '└── |||@empty-folder|||'].join('\n'),
     );
 });
@@ -284,6 +287,7 @@ test('renders missing records using the same reference formatter', () => {
     const rendered = renderPortalTree(
         buildPortalTree([missing], 'Project'),
         referenceFor,
+        new Map(),
     );
 
     assert.equal(rendered, [
@@ -299,7 +303,7 @@ test('propagates a structured error when formatting returns null', () => {
     const tree = buildPortalTree([file], 'Project');
 
     assert.throws(
-        () => renderPortalTree(tree, () => null),
+        () => renderPortalTree(tree, () => null, new Map()),
         error => error.name === 'FilePilotError'
             && error.code === 'FILE_REFERENCE_NOT_FOUND'
             && error.message.includes('Docs/report.pdf'),
@@ -313,7 +317,7 @@ test('propagates an exception thrown by the reference formatter', () => {
     assert.throws(
         () => renderPortalTree(buildPortalTree([file], 'Project'), () => {
             throw failure;
-        }),
+        }, new Map()),
         error => error === failure,
     );
 });
@@ -329,11 +333,86 @@ test('renders deterministically regardless of input order', () => {
     const forward = renderPortalTree(
         buildPortalTree(records, 'Project'),
         referenceFor,
+        new Map(),
     );
     const reverse = renderPortalTree(
         buildPortalTree([...records].reverse(), 'Project'),
         referenceFor,
+        new Map(),
     );
 
     assert.equal(reverse, forward);
+});
+
+test('formats Portal Tree summaries with an 80-character limit', () => {
+    assert.equal(formatPortalTreeSummary(null), null);
+    assert.equal(formatPortalTreeSummary(''), null);
+    assert.equal(formatPortalTreeSummary('Short summary'), 'Short summary');
+    assert.equal(formatPortalTreeSummary('中'.repeat(80)), '中'.repeat(80));
+    assert.equal(formatPortalTreeSummary('中'.repeat(81)), '中'.repeat(79) + '…');
+    assert.equal(formatPortalTreeSummary('😀'.repeat(81)), '😀'.repeat(79) + '…');
+});
+
+test('renders summaries for managed files and folders but not implicit folders', () => {
+    const folder = makeFolderRecord('docs', 'Docs');
+    const file = makeFileRecord('report', {
+        path: 'Docs/Reports/report.pdf',
+    });
+    const summaries = new Map([
+        ['docs', 'Folder overview'],
+        ['report', 'Report description'],
+    ]);
+
+    const rendered = renderPortalTree(
+        buildPortalTree([file, folder], 'Project'),
+        referenceFor,
+        summaries,
+    );
+
+    assert.equal(rendered, [
+        `Project${path.sep}`,
+        '└── |||@docs|||  # Folder overview',
+        `    └── Reports${path.sep}`,
+        '        └── |||@report|||  # Report description',
+    ].join('\n'));
+});
+
+test('omits annotations for empty, null, or absent summaries', () => {
+    const files = [
+        makeFileRecord('a', { path: 'a.txt' }),
+        makeFileRecord('b', { path: 'b.txt' }),
+        makeFileRecord('c', { path: 'c.txt' }),
+    ];
+    const summaries = new Map([
+        ['a', ''],
+        ['b', null],
+    ]);
+
+    const rendered = renderPortalTree(
+        buildPortalTree(files, 'Project'),
+        referenceFor,
+        summaries,
+    );
+
+    assert.equal(rendered, [
+        `Project${path.sep}`,
+        '├── |||@a|||',
+        '├── |||@b|||',
+        '└── |||@c|||',
+    ].join('\n'));
+});
+
+test('renders summaries by stable FileRecord ID rather than by file path', () => {
+    const file = makeFileRecord('stable-id', {
+        path: 'Renamed/report.pdf',
+    });
+    const summaries = new Map([['stable-id', 'Stored summary']]);
+
+    const rendered = renderPortalTree(
+        buildPortalTree([file], 'Project'),
+        referenceFor,
+        summaries,
+    );
+
+    assert.ok(rendered.includes('|||@stable-id|||  # Stored summary'));
 });

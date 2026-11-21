@@ -560,3 +560,19 @@ test('updateMarkdownSection makes no changes when Portal tree content is current
     );
 });
 
+
+test('normalizes repeated spaces, tabs, and line breaks in extracted File Summary', () => {
+    const content = [
+        '## File Summary',
+        '',
+        '  First   part\twith  spaces',
+        'and   a second\tline.  ',
+        '',
+        'Additional paragraph not included.',
+    ].join('\n');
+
+    assert.equal(
+        extractFirstParagraphFromHeading(content, 'File Summary'),
+        'First part with spaces and a second line.',
+    );
+});
