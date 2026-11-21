@@ -1,5 +1,6 @@
 import type { en } from './en';
 const pluginName = 'File Pilot'
+const syncButtonName = '单向同步'
 export const zh = {
 	pluginTitle: pluginName,
 	pluginLoaded: `${pluginName} 已加载`,
@@ -63,7 +64,7 @@ export const zh = {
 	projectNameInvalid:
 		'项目名称不能超过 30 个字符，不能包含控制字符或 \\ / : * ? " < > |，且不能以句点结尾',
 
-	oneWayScan: `单向扫描`,
+	sync: `${syncButtonName}`,
 	scanRootNotConfigured: `请先在插件设置页添加文件夹`,
 	scanCompleted:
 		'已导入 {fileCount} 个文件、{folderCount} 个文件夹',
@@ -114,4 +115,9 @@ export const zh = {
 	portalNoteUpdateFailed: '更新目录树失败',
 	portalNotePathOccupied:
 		'无法创建总览笔记：目标路径已被文件夹占用。',
+	portalNoteProjectNameChangeFailed:
+		'项目名称已保存，但总览笔记重命名或创建失败。',
+	portalNoteNotFound:
+		`总览笔记不存在，请先点击${syncButtonName}创建总览笔记。`,
+	portalNoteCreated: '总览笔记已创建',
 } satisfies Record<keyof typeof en, string>;

@@ -1,4 +1,5 @@
 const pluginName = 'File Pilot'
+const syncButtonName = 'One-way scan'
 export const en = {
 	// basic words
 	pluginTitle: pluginName,
@@ -64,7 +65,7 @@ export const en = {
 	scanRootSaveFailed: `Failed to save the directory`,
 	scanRootBrowseFailed: `Folder picker is unavailable. Enter the path manually.`,
 	// file pilot view
-	oneWayScan: `One-way scan`,
+	sync: `${syncButtonName}`,
 	scanRootNotConfigured: `Please add a folder in the plugin settings page first`,
 	scanCompleted:
 		'Imported {fileCount} files and {folderCount} folders',
@@ -115,4 +116,9 @@ export const en = {
 	portalNoteUpdateFailed: 'Failed to update directory tree',
 	portalNotePathOccupied:
 		'Cannot create Portal Note: the target path is occupied by a folder.',
+	portalNoteProjectNameChangeFailed:
+		'Project name saved, but failed to rename or create Portal Note.',
+	portalNoteNotFound:
+		`Portal Note does not exist. Please click ${syncButtonName} first.`,
+	portalNoteCreated: 'Portal Note created',
 } as const;

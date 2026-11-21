@@ -161,7 +161,7 @@ export class FilePilotView extends ItemView {
 		titleRowEl.appendChild(rootSetting.nameEl);
 		rootSetting.addButton((button) => {
 			button
-				.setButtonText(t('oneWayScan'))
+				.setButtonText(t('sync'))
 				.setCta()
 				.onClick(async () => {
 					if (this.scanning) {
@@ -203,20 +203,28 @@ export class FilePilotView extends ItemView {
 						}
 						console.error('File Pilot scan failed:', error);
 						new Notice(t('scanFailed'));
+						return;
 					} finally {
 						this.scanning = false;
 						button.setDisabled(false);
-						button.setButtonText(t('oneWayScan'));
+						button.setButtonText(t('sync'));
 					}
-					// Update the Portal Note after showing the scan feedback.
+					// Create the Portal Note if missing, otherwise update its tree.
 					try {
-						const result =
-							await this.filePilot.portalNoteService.syncPortalNote();
+						const created =
+							await this.filePilot.portalNoteService.createPortalNote();
 
-						showPortalNoteFeedback({
-							status: 'success',
-							changed: result.changed,
-						});
+						if (created) {
+							new Notice(t('portalNoteCreated'));
+						} else {
+							const changed =
+								await this.filePilot.portalNoteService.syncPortalNote();
+
+							showPortalNoteFeedback({
+								status: 'success',
+								changed,
+							});
+						}
 					} catch (error) {
 						showPortalNoteFeedback({
 							status: 'failure',

@@ -182,9 +182,9 @@ export default class FilePilotPlugin extends Plugin {
 			name: t('updatePortalNoteTreeCommand'),
 			callback: () => {
 				void this.portalNoteService.syncPortalNote().then(
-					(result) => showPortalNoteFeedback({
+					(changed) => showPortalNoteFeedback({
 						status: 'success',
-						changed: result.changed,
+						changed,
 					}),
 					(error: unknown) => showPortalNoteFeedback({
 						status: 'failure',
@@ -311,6 +311,9 @@ export default class FilePilotPlugin extends Plugin {
 		try {
 			// Finish all previously accepted data mutations.
 			await this.stateService.waitForPendingMutations();
+
+			// Delete the current Portal Note.
+			await this.portalNoteService.deletePortalNote();
 
 			// Delete the plugin-managed Shadow Notes.
 			await this.shadowNoteService.deleteAllShadowNotes();

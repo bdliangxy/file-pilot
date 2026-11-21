@@ -19,10 +19,6 @@ import { FilePilotError } from '../error';
 
 import { ShadowNoteService } from './shadow-note-service';
 
-export interface PortalNoteSyncResult {
-	changed: boolean;
-}
-
 const PORTAL_TREE_HEADING = 'Directory Tree';
 
 export class PortalNoteService {
@@ -33,31 +29,19 @@ export class PortalNoteService {
 		private readonly shadowNoteService: ShadowNoteService,
 	) { }
 
-
-	async syncPortalNote(): Promise<PortalNoteSyncResult> {
-		// Determine the current and previous Portal Note paths.
-		const projectName = this.stateService.getProjectName();
-		const noteName = projectName || 'PORTAL NOTE';
-		const notePath = `${noteName}.md`;
-
-		const previousProjectName =
-			this.stateService.getPreviousProjectName();
-		const previousNotePath =
-			previousProjectName === null
-				? null
-				: `${previousProjectName || 'PORTAL NOTE'}.md`;
-
-		// Build the tree using current FileRecords.
+	/**
+	 * Generate the complete managed Portal Tree code block.
+	 */
+	private async buildPortalTreeBlock(): Promise<string> {
 		const records = this.stateService.getFileRecords();
 		const rootPath = this.stateService.getRootPath();
+		const projectName = this.stateService.getProjectName();
 
 		const rootName = rootPath
-			? path.win32.basename(rootPath.replace(/[\\/]+$/, ''))
+			? path.win32.basename(rootPath)
 			: projectName || 'Root';
 
 		const tree = buildPortalTree(records, rootName);
-
-		// Read the latest File Summaries from Shadow Notes.
 		const summariesById = new Map<string, string | null>();
 
 		await Promise.all(
@@ -75,55 +59,122 @@ export class PortalNoteService {
 			summariesById,
 		);
 
-		const treeBlock = [
+		return [
 			'```file-pilot-tree',
 			treeText,
 			'```',
 		].join('\n');
+	}
+
+	/**
+	 * Create a Portal Note only when the target file does not exist.
+	 */
+	async createPortalNote(): Promise<boolean> {
+		const projectName = this.stateService.getProjectName();
+		const notePath = `${projectName || 'PORTAL NOTE'}.md`;
 
 		const vault = this.app.vault;
+		const existingEntry = vault.getAbstractFileByPath(notePath);
 
-		let existingEntry = vault.getAbstractFileByPath(notePath);
-		let renamed = false;
-
-		// Locate and rename the previous Portal Note when necessary.
-		if (
-			previousNotePath !== null &&
-			previousNotePath !== notePath
-		) {
-			const previousEntry =
-				vault.getAbstractFileByPath(previousNotePath);
-
-			if (
-				previousEntry instanceof TFile &&
-				existingEntry === null
-			) {
-				await vault.rename(previousEntry, notePath);
-
-				existingEntry = previousEntry;
-				renamed = true;
-			}
+		if (existingEntry instanceof TFile) {
+			return false;
 		}
 
-		// Create a new Portal Note when neither the current nor
-		// the previous Portal Note exists.
-		if (existingEntry === null) {
-			const content = updateMarkdownSection(
+		if (existingEntry !== null) {
+			throw new FilePilotError(
+				'PORTAL_NOTE_PATH_OCCUPIED',
+				`Portal Note path is occupied: ${notePath}`,
+			);
+		}
+
+		let content = '';
+
+		if (this.stateService.getFileRecords().length > 0) {
+			const treeBlock = await this.buildPortalTreeBlock();
+
+			content = updateMarkdownSection(
 				'',
 				PORTAL_TREE_HEADING,
 				treeBlock,
 				replacePortalTreeFence,
 			);
+		}
 
-			await vault.create(notePath, content);
+		await vault.create(notePath, content);
 
-			if (previousProjectName !== null) {
-				await this.stateService.clearPreviousProjectName();
-			}
+		return true;
+	}
 
-			return {
-				changed: true,
-			};
+	/**
+	 * Handle an existing Portal Note after the project name changes.
+	 */
+	async handlePortalNoteProjectNameChange(): Promise<
+		'created' | 'renamed' | 'unchanged'
+	> {
+		const previousProjectName =
+			this.stateService.getPreviousProjectName();
+
+		if (previousProjectName === null) {
+			return 'unchanged';
+		}
+
+		const projectName = this.stateService.getProjectName();
+
+		const notePath = `${projectName || 'PORTAL NOTE'}.md`;
+		const previousNotePath =
+			`${previousProjectName || 'PORTAL NOTE'}.md`;
+
+		const vault = this.app.vault;
+		const existingEntry = vault.getAbstractFileByPath(notePath);
+
+		// Preserve the current Portal Note when it already exists.
+		if (existingEntry instanceof TFile) {
+			await this.stateService.clearPreviousProjectName();
+			return 'unchanged';
+		}
+
+		if (existingEntry !== null) {
+			throw new FilePilotError(
+				'PORTAL_NOTE_PATH_OCCUPIED',
+				`Portal Note path is occupied: ${notePath}`,
+			);
+		}
+
+		const previousEntry =
+			previousNotePath !== notePath
+				? vault.getAbstractFileByPath(previousNotePath)
+				: null;
+
+		let result: 'created' | 'renamed' | 'unchanged';
+
+		if (previousEntry instanceof TFile) {
+			await vault.rename(previousEntry, notePath);
+			result = 'renamed';
+		} else {
+			const created = await this.createPortalNote();
+			result = created ? 'created' : 'unchanged';
+		}
+
+		await this.stateService.clearPreviousProjectName();
+
+		return result;
+	}
+
+	/**
+	 * Update only the directory tree in an existing Portal Note.
+	 */
+	async syncPortalNote(): Promise<boolean> {
+		const projectName = this.stateService.getProjectName();
+		const notePath = `${projectName || 'PORTAL NOTE'}.md`;
+
+		const vault = this.app.vault;
+		const existingEntry = vault.getAbstractFileByPath(notePath);
+
+		if (existingEntry === null) {
+			throw new FilePilotError(
+				'PORTAL_NOTE_NOT_FOUND',
+				`Portal Note does not exist: ${notePath}`,
+			);
 		}
 
 		if (!(existingEntry instanceof TFile)) {
@@ -133,9 +184,9 @@ export class PortalNoteService {
 			);
 		}
 
-		// Update only the managed tree fence.
-		// Renaming also counts as a change.
-		let changed = renamed;
+		const treeBlock = await this.buildPortalTreeBlock();
+
+		let changed = false;
 
 		await vault.process(existingEntry, (content) => {
 			const updatedContent = updateMarkdownSection(
@@ -145,19 +196,30 @@ export class PortalNoteService {
 				replacePortalTreeFence,
 			);
 
-			changed = updatedContent !== content || changed;
+			changed = updatedContent !== content;
 
 			return updatedContent;
 		});
 
-		// Clear the previous name only after successful synchronization.
-		if (previousProjectName !== null) {
-			await this.stateService.clearPreviousProjectName();
+		return changed;
+	}
+
+	/**
+ * Delete the current Portal Note.
+ */
+	async deletePortalNote(): Promise<boolean> {
+		const projectName = this.stateService.getProjectName();
+		const notePath = `${projectName || 'PORTAL NOTE'}.md`;
+
+		const entry = this.app.vault.getAbstractFileByPath(notePath);
+
+		if (!(entry instanceof TFile)) {
+			return false;
 		}
 
-		return {
-			changed,
-		};
+		await this.app.fileManager.trashFile(entry);
+
+		return true;
 	}
 
 }

@@ -34,8 +34,15 @@ async function setup(data = makePluginData()) {
     let projectNameRefreshes = 0;
     let listRefreshes = 0;
     let visibilityRefreshes = 0;
+    let portalNoteNameChanges = 0;
     const plugin = {
         stateService: service,
+        portalNoteService: {
+            async handlePortalNoteProjectNameChange() {
+                portalNoteNameChanges++;
+                return 'unchanged';
+            },
+        },
         refreshViewRootPath() { refreshes++; },
         refreshViewProjectName() { projectNameRefreshes++; },
         refreshViewFileList() { listRefreshes++; },
@@ -69,6 +76,7 @@ async function setup(data = makePluginData()) {
         get projectNameRefreshes() { return projectNameRefreshes; },
         get listRefreshes() { return listRefreshes; },
         get visibilityRefreshes() { return visibilityRefreshes; },
+        get portalNoteNameChanges() { return portalNoteNameChanges; },
     };
 }
 
@@ -371,17 +379,20 @@ test('project-name draft is saved and only its overview title is refreshed', asy
     assert.equal(ui.service.getProjectName(), 'My Project');
     assert.equal(ui.savedData.length, 1);
     assert.equal(ui.projectNameRefreshes, 1);
+    assert.equal(ui.portalNoteNameChanges, 1);
     assert.equal(ui.refreshes, 0);
     assert.equal(ui.listRefreshes, 0);
 
     await ui.save.click();
     assert.equal(ui.savedData.length, 1);
     assert.equal(ui.projectNameRefreshes, 1);
+    assert.equal(ui.portalNoteNameChanges, 1);
 
     ui.projectNameInput.edit(' ');
     await ui.save.click();
     assert.equal(ui.service.getProjectName(), '');
     assert.equal(ui.projectNameRefreshes, 2);
+    assert.equal(ui.portalNoteNameChanges, 2);
 });
 
 test('invalid project name shows localized validation feedback without refreshing the view', async () => {

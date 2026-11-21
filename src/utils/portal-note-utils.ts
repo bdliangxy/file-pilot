@@ -33,6 +33,10 @@ export function showPortalNoteFeedback(
 
 	if (error instanceof FilePilotError) {
 		switch (error.code) {
+			case 'PORTAL_NOTE_NOT_FOUND':
+				new Notice(t('portalNoteNotFound'));
+				return;
+
 			case 'PORTAL_NOTE_PATH_OCCUPIED':
 				new Notice(t('portalNotePathOccupied'));
 				return;

@@ -250,6 +250,24 @@ export class FilePilotSettingTab extends PluginSettingTab {
 				type: 'result',
 				result,
 			});
+			// Show feedback for Portal Note creation or directory tree synchronization.
+			if (result.updated.includes('projectName')) {
+				try {
+					const result = await this.filePilot.portalNoteService
+						.handlePortalNoteProjectNameChange();
+
+					if (result === 'created') {
+						new Notice(t('portalNoteCreated'));
+					}
+				} catch (error) {
+					console.error(
+						'Failed to handle Portal Note project name change:',
+						error,
+					);
+
+					new Notice(t('portalNoteProjectNameChangeFailed'));
+				}
+			}
 
 			return result;
 		} catch (error) {

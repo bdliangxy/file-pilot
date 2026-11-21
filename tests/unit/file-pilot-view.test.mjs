@@ -55,9 +55,8 @@ function setup(summaryReader = async () => null) {
             },
         },
         portalNoteService: {
-            syncPortalNote: async () => ({
-                changed: true,
-            }),
+            createPortalNote: async () => false,
+            syncPortalNote: async () => true,
         },
     };
     const view = new FilePilotView({
@@ -422,9 +421,7 @@ test('scan feedback reports when the Portal Note tree is unchanged', async () =>
         importedFileCount: 0,
         importedFolderCount: 0,
     });
-    ui.view.filePilot.portalNoteService.syncPortalNote = async () => ({
-        changed: false,
-    });
+    ui.view.filePilot.portalNoteService.syncPortalNote = async () => false;
 
     await ui.view.onOpen();
 

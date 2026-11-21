@@ -305,7 +305,7 @@ export class PluginStateService {
 				} else if (
 					newName !== currentData.settingData.projectName
 				) {
-					// Preserve the first project name until Portal Note synchronization completes.
+					// Preserve the first project name until Portal Note name handling completes.
 					if (currentData.settingData.previousProjectName === null) {
 						nextData.settingData.previousProjectName =
 							currentData.settingData.projectName;
