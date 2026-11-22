@@ -41,6 +41,7 @@ function makeEmitter() {
 
 function makeApp() {
     const notes = new Map();
+    const contents = new Map();
     const vault = makeEmitter();
     let folder = null;
 
@@ -53,10 +54,19 @@ function makeApp() {
         async createFolder(folderPath) {
             folder = { path: folderPath, children: [] };
         },
-        async create(notePath) {
+        async cachedRead(note) {
+            return contents.get(note.path) ?? '';
+        },
+        async process(note, updater) {
+            const updated = updater(contents.get(note.path) ?? '');
+            contents.set(note.path, updated);
+            return updated;
+        },
+        async create(notePath, content = '') {
             const note = new TFile(notePath);
             notes.set(notePath, note);
-            folder?.children.push(note);
+            contents.set(notePath, content);
+            if (notePath.startsWith('ShadowNotes/')) folder?.children.push(note);
             return note;
         },
     });
@@ -72,6 +82,7 @@ function makeApp() {
                     return;
                 }
                 notes.delete(file.path);
+                contents.delete(file.path);
                 if (folder) {
                     folder.children = folder.children.filter(note => note !== file);
                 }
@@ -79,7 +90,7 @@ function makeApp() {
             },
         },
     };
-    return { app, notes };
+    return { app, notes, contents };
 }
 
 async function setup(t, { records = [], scannedFileNames = [] } = {}) {
@@ -98,7 +109,7 @@ async function setup(t, { records = [], scannedFileNames = [] } = {}) {
         await writeFile(path.join(root, name), 'test');
     }
 
-    const { app, notes } = makeApp();
+    const { app, notes, contents } = makeApp();
     const plugin = new FilePilotPlugin(app);
     plugin.testStoredData = makePluginData({
         rootPath: root,
@@ -116,7 +127,7 @@ async function setup(t, { records = [], scannedFileNames = [] } = {}) {
     await plugin.onload();
     t.after(() => plugin.shadowNoteWatcher.unload());
 
-    return { plugin, app, notes, root };
+    return { plugin, app, notes, root, contents };
 }
 
 function lookup(plugin, id) {
@@ -487,4 +498,38 @@ test('file reference command remains disabled inside ordinary code fences', asyn
     assert.equal(editor.text, '```typescript\n├── ');
     assert.equal(frames.length, 0);
     assert.equal(plugin.editorSuggest.triggerCalls.length, 0);
+});
+
+
+test('updates Portal Tree annotations from Shadow Note metadata events', async t => {
+    const first = makeFileRecord(ID_A, { shadowNotePath: 'ShadowNotes/first.md' });
+    const second = makeFileRecord(ID_B, { path: 'other.pdf', shadowNotePath: 'ShadowNotes/second.md' });
+    const { plugin, app, notes, contents } = await setup(t, { records: [first, second] });
+    const notePath = (plugin.stateService.getProjectName() || 'PORTAL NOTE') + '.md';
+    contents.set(first.shadowNotePath, '## File Summary\n\nInitial');
+    contents.set(second.shadowNotePath, '## File Summary\n\nKeep this');
+    assert.equal(await plugin.portalNoteService.createPortalNote(), true);
+    const original = contents.get(notePath);
+    assert.ok(original.includes('|||@' + ID_A + '|||  # Initial'));
+    assert.ok(original.includes('|||@' + ID_B + '|||  # Keep this'));
+    let updates = 0;
+    const originalUpdate = plugin.portalNoteService.updateFileSummaryAnnotation.bind(plugin.portalNoteService);
+    plugin.portalNoteService.updateFileSummaryAnnotation = (...args) => {
+        updates++;
+        return originalUpdate(...args);
+    };
+    contents.set(first.shadowNotePath, '## File Summary\n\nRevised');
+    app.metadataCache.emit('changed', notes.get(first.shadowNotePath));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(contents.get(notePath), original.replace('  # Initial', '  # Revised'));
+    assert.equal(updates, 1);
+    app.metadataCache.emit('changed', notes.get(first.shadowNotePath));
+    app.metadataCache.emit('changed', notes.get(notePath));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(updates, 1);
+    contents.set(first.shadowNotePath, '## File Summary\n');
+    app.metadataCache.emit('changed', notes.get(first.shadowNotePath));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(contents.get(notePath), original.replace('  # Initial', ''));
+    assert.equal(updates, 2);
 });

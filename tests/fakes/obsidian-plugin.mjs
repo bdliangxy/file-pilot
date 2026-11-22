@@ -30,6 +30,7 @@ export class Plugin {
         this.app = app;
         this.children = [];
         this.registeredViews = [];
+        this.registeredCleanups = [];
     }
 
     async loadData() {
@@ -38,6 +39,10 @@ export class Plugin {
 
     async saveData(data) {
         this.testStoredData = structuredClone(data);
+    }
+
+    register(callback) {
+        this.registeredCleanups.push(callback);
     }
 
     addChild(child) {

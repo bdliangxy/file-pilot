@@ -1,38 +1,68 @@
 # File Pilot — C3 Component Diagram
 
+The following views show direct component dependencies within the same plugin.
+
+## File Management and Settings
+
 ```mermaid
 flowchart TD
-    View["FilePilotView"] -->|"display data"| Main["FilePilotPlugin"]
-    View -->|"watch data"| Watcher["ShadowNoteWatcher"]
-    Watcher -->|"Remove records"| State
+    View["FilePilotView"] -->|"Display data"| Main["FilePilotPlugin"]
     Settings["FilePilotSettingTab"] -->|"Save settings"| State["PluginStateService"]
     Settings -->|"Edit rules"| IgnoreSection["IgnoreRulesSettingSection"]
     IgnoreSection -->|"Read rules"| State
+
     Main -->|"Read and save data"| State
     Main -->|"Run sync"| Sync["FileSyncService"]
     Main -->|"Execute file actions"| Action["FileActionService"]
-    Main -->|"Rebuild reference index"| Reference["FileReferenceService"]
-    Main -->|"Initialize service and register update command"| Portal
-    View -->|"Trigger update after one-way scan"| Portal
-    Portal["PortalNoteService"] -->|"Read records and settings"| State
-    Portal -->|"Format file references"| Reference
-    Portal -->|"Build and render directory tree"| PortalTree["PortalTreeUtils"]
-    Main -->|"Render references"| ReadingRenderer["FileReferenceReadingRenderer"]
-    Main -->|"Register editor extension"| EditorExtension["FileReferenceEditorExtension"]
-    Main -->|"Register suggestions"| Suggest["FileReferenceSuggest"]
-    ReadingRenderer -->|"Resolve references"| Reference
-    EditorExtension -->|"Resolve references"| Reference
-    Suggest -->|"Format references"| Reference
-    Reference -->|"Parse references"| ReferenceUtils["FileReferenceUtils"]
-    ReadingRenderer -->|"Find references"| ReferenceUtils
-    EditorExtension -->|"Find references"| ReferenceUtils
-    Suggest -->|"Detect completed references"| ReferenceUtils
-    ReadingRenderer -->|"Create interactive element"| ReferenceElement["FileReferenceElement"]
-    EditorExtension -->|"Create interactive element"| ReferenceElement
-    ReferenceElement -->|"Resolve current record"| Reference
-    ReadingRenderer -->|"Get display data"| ReferenceDisplay["FileReferenceDisplay"]
-    EditorExtension -->|"Get display data"| ReferenceDisplay
     Sync -->|"Scan"| Scanner["FileScanner"]
     Sync -->|"Import"| Import["file-import"]
     Import -->|"Create notes"| Shadow["ShadowNoteService"]
+```
+
+## Shadow Notes and Portal Note
+
+```mermaid
+flowchart TD
+    Main["FilePilotPlugin"] -->|"Subscribe to Summary changes"| Watcher["ShadowNoteWatcher"]
+    Main -->|"Manage Portal Note and annotations"| Portal["PortalNoteService"]
+    Main -->|"Read summaries and clear notes"| Shadow["ShadowNoteService"]
+    View["FilePilotView"] -->|"Watch Summary changes"| Watcher
+    View -->|"Read and edit summaries"| Shadow
+    View -->|"Update tree after scan"| Portal
+    Settings["FilePilotSettingTab"] -->|"Handle project name changes"| Portal
+
+    Watcher -->|"Read and remove records"| State["PluginStateService"]
+    Portal -->|"Read records and settings"| State
+    Portal -->|"Format references"| Reference["FileReferenceService"]
+    Portal -->|"Read summaries"| Shadow
+    Portal -->|"Build and render tree"| PortalTree["PortalTreeUtils"]
+    Portal -->|"Update Markdown"| ShadowUtils["ShadowNoteUtils"]
+    Shadow -->|"Extract and update Summary"| ShadowUtils
+    ShadowUtils -->|"Format tree annotations"| PortalTree
+```
+
+## File References
+
+```mermaid
+flowchart TD
+    Main["FilePilotPlugin"] -->|"Rebuild index"| Reference["FileReferenceService"]
+    Main -->|"Render references"| ReadingRenderer["FileReferenceReadingRenderer"]
+    Main -->|"Register editor extension"| EditorExtension["FileReferenceEditorExtension"]
+    Main -->|"Register suggestions"| Suggest["FileReferenceSuggest"]
+
+    ReadingRenderer -->|"Resolve references"| Reference
+    EditorExtension -->|"Resolve references"| Reference
+    Suggest -->|"Format references"| Reference
+
+    ReadingRenderer -->|"Find references"| ReferenceUtils["FileReferenceUtils"]
+    EditorExtension -->|"Find references"| ReferenceUtils
+    Suggest -->|"Detect completed references"| ReferenceUtils
+    Reference -->|"Parse references"| ReferenceUtils
+
+    ReadingRenderer -->|"Create interactive element"| ReferenceElement["FileReferenceElement"]
+    EditorExtension -->|"Create interactive element"| ReferenceElement
+    ReferenceElement -->|"Resolve current record"| Reference
+
+    ReadingRenderer -->|"Get display data"| ReferenceDisplay["FileReferenceDisplay"]
+    EditorExtension -->|"Get display data"| ReferenceDisplay
 ```

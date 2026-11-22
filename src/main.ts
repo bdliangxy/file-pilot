@@ -91,6 +91,23 @@ export default class FilePilotPlugin extends Plugin {
 			(record) => this.shadowNoteService.getFileSummary(record),
 		);
 
+		// Automatically update Portal Tree annotations when a File Summary changes.
+		this.register(
+			this.shadowNoteWatcher.onFileSummaryChanged(
+				({ fileId, summary }) => {
+					void this.portalNoteService
+						.updateFileSummaryAnnotation(fileId, summary)
+						.catch((error: unknown) => {
+							console.error(
+								'Failed to update Portal Tree annotation:',
+								fileId,
+								error,
+							);
+						});
+				},
+			),
+		);
+
 		this.addChild(this.shadowNoteWatcher);
 
 		// Register settings.

@@ -110,6 +110,7 @@ function createFixture({
     let pendingPreviousProjectName = previousProjectName;
 
     const stateService = {
+        isClearingData: false,
         getProjectName: () => projectName,
         getPreviousProjectName: () => pendingPreviousProjectName,
         getRootPath: () => rootPath,
@@ -125,7 +126,7 @@ function createFixture({
             referenceCalls.push(id);
             return formatFileReference
                 ? formatFileReference(id)
-                : `|||@${id}|||`;
+                : records.some(record => record.id === id) ? `|||@${id}|||` : null;
         },
     };
 
@@ -147,6 +148,7 @@ function createFixture({
         calls,
         referenceCalls,
         stateCalls,
+        stateService,
     };
 }
 
@@ -557,4 +559,170 @@ test('does not modify user Markdown outside the tree when summaries change', asy
     assert.ok(updated.includes('User notes above fence.'));
     assert.ok(updated.includes('User notes below fence.'));
     assert.ok(updated.includes('## Personal\n\nKeep this section.'));
+});
+
+
+function summaryFixture(options = {}) {
+    const file = makeFileRecord('File00000001', { path: 'a.pdf' });
+    const folder = { ...makeFileRecord('Folder000001', { path: 'Docs' }), kind: 'folder' };
+    const original = [
+        '# User content', '', 'Keep this text.', '', '## Directory Tree', '',
+        '~~~file-pilot-tree', 'Project/',
+        '\u251c\u2500\u2500 |||@Folder000001|||  # Folder summary',
+        '\u2514\u2500\u2500 |||@File00000001|||  # Old summary',
+        '~~~', '', '## Personal', '', 'Keep this section.', '',
+    ].join('\n');
+    return {
+        ...createFixture({
+            records: [file, folder],
+            files: [{ path: 'My Project.md', content: original }],
+            ...options,
+        }),
+        original,
+    };
+}
+
+test('updates only the target file annotation using the indexed ID', async () => {
+    const fixture = summaryFixture({
+        getFileSummary: async () => { throw new Error('Unexpected Summary read'); },
+    });
+    assert.equal(await fixture.service.updateFileSummaryAnnotation('File00000001', 'New summary'), true);
+    assert.equal(fixture.contents.get('My Project.md'),
+        fixture.original.replace('  # Old summary', '  # New summary'));
+    assert.deepEqual(fixture.referenceCalls, ['File00000001']);
+    assert.equal(fixture.calls.processed.length, 1);
+    assert.equal(fixture.calls.created.length, 0);
+    assert.equal(await fixture.service.updateFileSummaryAnnotation('File00000001', 'New summary'), false);
+});
+
+test('adds and removes managed folder annotations without changing its tree node', async () => {
+    const fixture = summaryFixture();
+    const reference = '|||@Folder000001|||';
+    const cleared = fixture.original.replace(reference + '  # Folder summary', reference);
+    assert.equal(await fixture.service.updateFileSummaryAnnotation('Folder000001', null), true);
+    assert.equal(fixture.contents.get('My Project.md'), cleared);
+    assert.equal(await fixture.service.updateFileSummaryAnnotation('Folder000001', 'New folder summary'), true);
+    assert.equal(fixture.contents.get('My Project.md'),
+        cleared.replace(reference, reference + '  # New folder summary'));
+});
+
+test('ignores unknown and incorrectly cased IDs without accessing the Portal Note', async () => {
+    const fixture = summaryFixture();
+    for (const id of ['Unknown00001', 'file00000001']) {
+        assert.equal(await fixture.service.updateFileSummaryAnnotation(id, 'Ignored'), false);
+    }
+    assert.deepEqual(fixture.calls.lookups, []);
+    assert.deepEqual(fixture.calls.processed, []);
+    assert.equal(fixture.contents.get('My Project.md'), fixture.original);
+});
+
+test('does not create a missing Portal Note for a Summary update', async () => {
+    const fixture = summaryFixture({ files: [] });
+    assert.equal(await fixture.service.updateFileSummaryAnnotation('File00000001', 'New'), false);
+    assert.deepEqual(fixture.calls.created, []);
+    assert.deepEqual(fixture.calls.processed, []);
+});
+
+test('reports a folder occupying the Portal Note path during a Summary update', async () => {
+    const fixture = summaryFixture({ files: [], folders: ['My Project.md'] });
+    await assert.rejects(fixture.service.updateFileSummaryAnnotation('File00000001', 'New'),
+        error => error.code === 'PORTAL_NOTE_PATH_OCCUPIED');
+    assert.deepEqual(fixture.calls.processed, []);
+});
+
+test('does not insert a missing tree node or create a missing tree section', async () => {
+    for (const content of ['# Personal\n\nKeep this.', '## Directory Tree\n\n~~~file-pilot-tree\nProject/\n~~~\n']) {
+        const fixture = summaryFixture({ files: [{ path: 'My Project.md', content }] });
+        assert.equal(await fixture.service.updateFileSummaryAnnotation('File00000001', 'New'), false);
+        assert.equal(fixture.contents.get('My Project.md'), content);
+    }
+});
+
+test('skips Summary updates while clearing data', async () => {
+    const fixture = summaryFixture();
+    fixture.stateService.isClearingData = true;
+    assert.equal(await fixture.service.updateFileSummaryAnnotation('File00000001', 'Ignored'), false);
+    assert.deepEqual(fixture.calls.lookups, []);
+    assert.equal(fixture.contents.get('My Project.md'), fixture.original);
+});
+
+test('serializes full tree generation and later Summary updates', async () => {
+    let releaseRead;
+    let signalRead;
+    const gate = new Promise(resolve => { releaseRead = resolve; });
+    const started = new Promise(resolve => { signalRead = resolve; });
+    const fixture = summaryFixture({
+        getFileSummary: async record => {
+            if (record.id === 'File00000001') {
+                signalRead();
+                await gate;
+                return 'Old snapshot';
+            }
+            return 'Folder summary';
+        },
+    });
+    const full = fixture.service.syncPortalNote();
+    await started;
+    const partial = fixture.service.updateFileSummaryAnnotation('File00000001', 'Latest summary');
+    try {
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(fixture.calls.processed.length, 0);
+    } finally {
+        releaseRead();
+        await Promise.all([full, partial]);
+    }
+    assert.equal(fixture.calls.processed.length, 2);
+    assert.ok(fixture.contents.get('My Project.md').includes('|||@File00000001|||  # Latest summary'));
+    assert.ok(!fixture.contents.get('My Project.md').includes('Old snapshot'));
+});
+
+test('applies queued Summary updates in order and retains changes to other nodes', async () => {
+    const fixture = summaryFixture();
+    const results = await Promise.all([
+        fixture.service.updateFileSummaryAnnotation('File00000001', 'First'),
+        fixture.service.updateFileSummaryAnnotation('Folder000001', 'New folder'),
+        fixture.service.updateFileSummaryAnnotation('File00000001', 'Last'),
+    ]);
+    assert.deepEqual(results, [true, true, true]);
+    assert.equal(fixture.contents.get('My Project.md'), fixture.original
+        .replace('  # Old summary', '  # Last')
+        .replace('  # Folder summary', '  # New folder'));
+});
+
+test('skips a queued Summary update when clearing starts before execution', async () => {
+    let releaseRead;
+    const gate = new Promise(resolve => { releaseRead = resolve; });
+    const fixture = summaryFixture({ getFileSummary: async () => gate });
+    const full = fixture.service.syncPortalNote();
+    const partial = fixture.service.updateFileSummaryAnnotation('File00000001', 'Ignored');
+    fixture.stateService.isClearingData = true;
+    releaseRead('Full summary');
+    await full;
+    assert.equal(await partial, false);
+    assert.equal(fixture.calls.processed.length, 1);
+    assert.ok(!fixture.contents.get('My Project.md').includes('Ignored'));
+});
+
+test('continues processing Summary updates after a full synchronization fails', async () => {
+    const fixture = summaryFixture({
+        getFileSummary: async () => { throw new Error('Summary read failed'); },
+    });
+    const full = fixture.service.syncPortalNote();
+    const partial = fixture.service.updateFileSummaryAnnotation('File00000001', 'Recovered');
+    await assert.rejects(full, /Summary read failed/);
+    assert.equal(await partial, true);
+    assert.equal(fixture.contents.get('My Project.md'),
+        fixture.original.replace('  # Old summary', '  # Recovered'));
+});
+
+test('serializes Portal Note creation, Summary updates and deletion', async () => {
+    const fixture = summaryFixture({ files: [] });
+    const created = fixture.service.createPortalNote();
+    const updated = fixture.service.updateFileSummaryAnnotation('File00000001', 'New');
+    const deleted = fixture.service.deletePortalNote();
+    assert.deepEqual(await Promise.all([created, updated, deleted]), [true, true, true]);
+    assert.equal(fixture.calls.created.length, 1);
+    assert.equal(fixture.calls.processed.length, 1);
+    assert.equal(fixture.calls.trashed.length, 1);
+    assert.equal(fixture.contents.has('My Project.md'), false);
 });
