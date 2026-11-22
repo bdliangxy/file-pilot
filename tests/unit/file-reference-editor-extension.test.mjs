@@ -19,15 +19,11 @@ const { createFileReferenceEditorExtension } = await jiti.import(
 const { FileReferenceService } = await jiti.import(
     '../../src/core/file-reference-service.ts',
 );
-const { generateShortKey } = await jiti.import(
-    '../../src/utils/file-reference-utils.ts',
-);
 const { setLanguage, getLanguage } = await import('../fakes/obsidian.mjs');
 
-const ID_A = '550e8400-e29b-41d4-a716-446655440000';
-const ID_B = '6fa459ea-ee8a-3ca4-894e-db77e160355e';
-const shortRef = id => `|||@${generateShortKey(id)}|||`;
-const fullRef = id => `|||!${id}|||`;
+const ID_A = 'Ab7Xc9Km2LdQ';
+const ID_B = 'Zk3Mr6Tn8PwV';
+const fileRef = id => `|||@${id}|||`;
 
 function makeDocument(text) {
     const lines = text.split('\n');
@@ -163,8 +159,8 @@ function rendered(ctx) {
     }));
 }
 
-test('Live Preview replaces short and full references at document offsets', t => {
-    const text = `before ${shortRef(ID_A)} then ${fullRef(ID_B)} after`;
+test('Live Preview replaces file references at document offsets', t => {
+    const text = `before ${fileRef(ID_A)} then ${fileRef(ID_B)} after`;
     const ctx = setup(t, text, {
         records: [
             makeFileRecord(ID_A, { path: 'docs/report.pdf' }),
@@ -176,8 +172,8 @@ test('Live Preview replaces short and full references at document offsets', t =>
     assert.deepEqual(
         result.map(item => [item.from, item.to]),
         [
-            [text.indexOf(shortRef(ID_A)), text.indexOf(shortRef(ID_A)) + shortRef(ID_A).length],
-            [text.indexOf(fullRef(ID_B)), text.indexOf(fullRef(ID_B)) + fullRef(ID_B).length],
+            [text.indexOf(fileRef(ID_A)), text.indexOf(fileRef(ID_A)) + fileRef(ID_A).length],
+            [text.indexOf(fileRef(ID_B)), text.indexOf(fileRef(ID_B)) + fileRef(ID_B).length],
         ],
     );
     assert.ok(result.every(item => item.dom.classList.contains('file-pilot-reference')));
@@ -185,49 +181,46 @@ test('Live Preview replaces short and full references at document offsets', t =>
 });
 
 test('Source Mode provides no replacement decorations', t => {
-    const text = shortRef(ID_A);
+    const text = fileRef(ID_A);
     const ctx = setup(t, text, { live: false });
     assert.equal(decorations(ctx).length, 0);
 });
 
-test('valid but unknown, ambiguous, and missing-status records display their states', t => {
-    const text = [shortRef(ID_A), fullRef(ID_B), fullRef(ID_A)].join(' ');
+test('valid but unknown and missing-status records display their states', t => {
+    const text = [fileRef(ID_B), fileRef(ID_A)].join(' ');
     const record = makeFileRecord(ID_A, { status: 'missing' });
-    const ctx = setup(t, text, { records: [makeFileRecord(ID_A), record] });
+    const ctx = setup(t, text, { records: [record] });
     const items = rendered(ctx);
-    assert.equal(items.length, 3);
-    assert.equal(items[0].dom.textContent, 'Ambiguous file reference');
-    assert.equal(items[1].dom.textContent, 'This file is not recorded');
-    assert.equal(items[2].dom.textContent, 'report.pdf (Missing)');
+    assert.equal(items.length, 2);
+    assert.equal(items[0].dom.textContent, 'This file is not recorded');
+    assert.equal(items[1].dom.textContent, 'report.pdf (Missing)');
     assert.ok(items[0].dom.classList.contains('file-pilot-reference-unresolved'));
-    assert.ok(items[1].dom.classList.contains('file-pilot-reference-unresolved'));
-    assert.ok(!items[2].dom.classList.contains('file-pilot-reference-unresolved'));
-    assert.match(items[0].dom.title, /Multiple managed files/);
-    assert.match(items[1].dom.title, /No managed file/);
+    assert.ok(!items[1].dom.classList.contains('file-pilot-reference-unresolved'));
+    assert.match(items[0].dom.title, /No managed file/);
 });
 
 test('malformed reference candidates are left untouched', t => {
-    const text = `|||@invalid||| and ${shortRef(ID_A)}`;
+    const text = `|||@invalid||| and ${fileRef(ID_A)}`;
     const ctx = setup(t, text);
     assert.equal(rendered(ctx).length, 1);
-    assert.equal(decorations(ctx)[0].from, text.indexOf(shortRef(ID_A)));
+    assert.equal(decorations(ctx)[0].from, text.indexOf(fileRef(ID_A)));
 });
 
 test('complete-line scanning finds a reference split by the visible range boundary', t => {
-    const text = `prefix ${shortRef(ID_A)} suffix`;
-    const refStart = text.indexOf(shortRef(ID_A));
+    const text = `prefix ${fileRef(ID_A)} suffix`;
+    const refStart = text.indexOf(fileRef(ID_A));
     const ctx = setup(t, text, {
         visibleRanges: [{ from: refStart + 5, to: refStart + 9 }],
     });
     assert.deepEqual(
         decorations(ctx).map(item => [item.from, item.to]),
-        [[refStart, refStart + shortRef(ID_A).length]],
+        [[refStart, refStart + fileRef(ID_A).length]],
     );
 });
 
 test('multiple visible ranges on one line do not duplicate decorations', t => {
-    const text = `prefix ${shortRef(ID_A)} suffix`;
-    const refStart = text.indexOf(shortRef(ID_A));
+    const text = `prefix ${fileRef(ID_A)} suffix`;
+    const refStart = text.indexOf(fileRef(ID_A));
     const ctx = setup(t, text, {
         visibleRanges: [
             { from: refStart + 2, to: refStart + 4 },
@@ -238,7 +231,7 @@ test('multiple visible ranges on one line do not duplicate decorations', t => {
 });
 
 test('only references intersecting visible ranges receive decorations', t => {
-    const text = `${shortRef(ID_A)} ------- ${fullRef(ID_B)}`;
+    const text = `${fileRef(ID_A)} ------- ${fileRef(ID_B)}`;
     const ctx = setup(t, text, {
         visibleRanges: [{ from: 0, to: 4 }],
     });
@@ -247,18 +240,18 @@ test('only references intersecting visible ranges receive decorations', t => {
 });
 
 test('multiple Markdown lines retain correct absolute offsets and sorted ranges', t => {
-    const text = `First line\n${shortRef(ID_A)}\nOther text\n${fullRef(ID_B)}`;
+    const text = `First line\n${fileRef(ID_A)}\nOther text\n${fileRef(ID_B)}`;
     const ctx = setup(t, text, {
         visibleRanges: [{ from: 9, to: text.length }],
     });
     assert.deepEqual(
         decorations(ctx).map(item => item.from),
-        [text.indexOf(shortRef(ID_A)), text.indexOf(fullRef(ID_B))],
+        [text.indexOf(fileRef(ID_A)), text.indexOf(fileRef(ID_B))],
     );
 });
 
 test('references in excluded Markdown syntax are not decorated', t => {
-    const ref = shortRef(ID_A);
+    const ref = fileRef(ID_A);
     const kinds = ['CodeText', 'FencedCode', 'Link', 'Frontmatter', 'YAML', 'Math', 'HTML'];
     for (const name of kinds) {
         const ctx = setup(t, ref, { excluded: [{ from: 0, to: ref.length, name }] });
@@ -267,7 +260,7 @@ test('references in excluded Markdown syntax are not decorated', t => {
 });
 
 test('rebuilding after a mode change removes and restores decorations', t => {
-    const text = shortRef(ID_A);
+    const text = fileRef(ID_A);
     const ctx = setup(t, text);
     assert.equal(decorations(ctx).length, 1);
     const previous = ctx.view.state;
@@ -293,7 +286,7 @@ test('rebuilding after a mode change removes and restores decorations', t => {
 });
 
 test('document and viewport changes rebuild decorations', t => {
-    const text = shortRef(ID_A);
+    const text = fileRef(ID_A);
     const ctx = setup(t, text);
     assert.equal(decorations(ctx).length, 1);
     const firstState = ctx.view.state;
@@ -321,7 +314,7 @@ test('document and viewport changes rebuild decorations', t => {
 });
 
 test('Widget equality reflects displayed text, status, and hint', t => {
-    const text = shortRef(ID_A);
+    const text = fileRef(ID_A);
     const ctx = setup(t, text);
     const widget = decorations(ctx)[0].widget;
     const same = decorations(ctx)[0].widget;
@@ -336,15 +329,15 @@ test('Widget uses localized unresolved text and hint', t => {
     const original = getLanguage();
     setLanguage('zh');
     t.after(() => setLanguage(original));
-    const text = fullRef(ID_B);
+    const text = fileRef(ID_B);
     const ctx = setup(t, text, { records: [] });
     const element = rendered(ctx)[0].dom;
     assert.equal(element.textContent, '该文件未被记录');
     assert.equal(element.title, '没有与此引用匹配的受管理文件。');
 });
 
-test('selected full reference uses the selected widget class', t => {
-    const ref = shortRef(ID_A);
+test('selected reference uses the selected widget class', t => {
+    const ref = fileRef(ID_A);
     const text = `before ${ref} after`;
     const from = text.indexOf(ref);
     const ctx = setup(t, text, {
@@ -357,7 +350,7 @@ test('selected full reference uses the selected widget class', t => {
 });
 
 test('partial selection does not mark a reference fully selected', t => {
-    const ref = shortRef(ID_A);
+    const ref = fileRef(ID_A);
     const text = `before ${ref} after`;
     const from = text.indexOf(ref);
     const ctx = setup(t, text, {
@@ -371,7 +364,7 @@ test('partial selection does not mark a reference fully selected', t => {
 });
 
 test('selection change refreshes the selected widget without editing source text', t => {
-    const ref = shortRef(ID_A);
+    const ref = fileRef(ID_A);
     const text = `before ${ref} after`;
     const from = text.indexOf(ref);
     const ctx = setup(t, text);
@@ -410,7 +403,7 @@ test('selection change refreshes the selected widget without editing source text
 });
 
 test('atomic range provider reuses decorations and returns none when plugin is absent', t => {
-    const ref = shortRef(ID_A);
+    const ref = fileRef(ID_A);
     const ctx = setup(t, ref);
     const atomic = ctx.extension.provided[0];
 
@@ -420,7 +413,7 @@ test('atomic range provider reuses decorations and returns none when plugin is a
 });
 
 test('Source Mode has no selected widgets or atomic ranges', t => {
-    const ref = shortRef(ID_A);
+    const ref = fileRef(ID_A);
     const ctx = setup(t, ref, {
         live: false,
         selections: [{ from: 0, to: ref.length }],
@@ -444,7 +437,7 @@ async function flushWidgetActions() {
 }
 
 test('Live Preview widget shares file gestures without intercepting ordinary clicks', async t => {
-    const ctx = setup(t, shortRef(ID_A));
+    const ctx = setup(t, fileRef(ID_A));
     const element = rendered(ctx)[0].dom;
 
     assert.equal(widgetMouse(ctx, element, 'click').defaultPrevented, false);
@@ -463,7 +456,7 @@ test('Live Preview hover previews the current Shadow Note with a stable hover pa
     const record = makeFileRecord(ID_A, {
         shadowNotePath: 'ShadowNotes/report.md',
     });
-    const ctx = setup(t, shortRef(ID_A), { records: [record] });
+    const ctx = setup(t, fileRef(ID_A), { records: [record] });
     const element = rendered(ctx)[0].dom;
 
     widgetMouse(ctx, element, 'mouseover');
@@ -486,7 +479,7 @@ test('Live Preview hover previews the current Shadow Note with a stable hover pa
 });
 
 test('Live Preview widget re-resolves records for actions and ignores deleted records', async t => {
-    const ctx = setup(t, shortRef(ID_A), {
+    const ctx = setup(t, fileRef(ID_A), {
         records: [makeFileRecord(ID_A, { path: 'docs/old.pdf' })],
     });
     const element = rendered(ctx)[0].dom;
@@ -507,7 +500,7 @@ test('Live Preview widget re-resolves records for actions and ignores deleted re
 
 test('Live Preview missing source supports only Shadow Note action and hover', async t => {
     const record = makeFileRecord(ID_A, { status: 'missing' });
-    const ctx = setup(t, shortRef(ID_A), { records: [record] });
+    const ctx = setup(t, fileRef(ID_A), { records: [record] });
     const element = rendered(ctx)[0].dom;
 
     assert.equal(element.textContent, 'report.pdf (Missing)');
@@ -522,7 +515,7 @@ test('Live Preview missing source supports only Shadow Note action and hover', a
 });
 
 test('Live Preview unresolved references never open files or preview Shadow Notes', async t => {
-    const ctx = setup(t, fullRef(ID_B), { records: [] });
+    const ctx = setup(t, fileRef(ID_B), { records: [] });
     const element = rendered(ctx)[0].dom;
 
     assert.equal(element.classList.contains('file-pilot-reference-unresolved'), true);
@@ -536,7 +529,7 @@ test('Live Preview unresolved references never open files or preview Shadow Note
 });
 
 test('Live Preview widget reports rejected file actions through the shared notifier', async t => {
-    const ctx = setup(t, shortRef(ID_A));
+    const ctx = setup(t, fileRef(ID_A));
     const previousError = console.error;
     const messages = [];
     const { Notice } = await import('../fakes/obsidian-settings.mjs');
@@ -559,7 +552,7 @@ async function flushReferenceRefresh() {
 
 test('index rebuild refreshes an existing widget without changing editor document', async t => {
     const record = makeFileRecord(ID_A, { path: 'docs/original.pdf' });
-    const ctx = setup(t, shortRef(ID_A), { records: [record] });
+    const ctx = setup(t, fileRef(ID_A), { records: [record] });
     const beforeDoc = ctx.view.state.doc;
     const beforeWidget = decorations(ctx)[0].widget;
 
@@ -577,7 +570,7 @@ test('index rebuild refreshes an existing widget without changing editor documen
 });
 
 test('multiple index rebuilds in the same turn coalesce into one refresh', async t => {
-    const ctx = setup(t, shortRef(ID_A));
+    const ctx = setup(t, fileRef(ID_A));
     ctx.service.rebuildReferenceIndex([
         makeFileRecord(ID_A, { path: 'docs/intermediate.pdf' }),
     ]);
@@ -591,7 +584,7 @@ test('multiple index rebuilds in the same turn coalesce into one refresh', async
 });
 
 test('index removal and reappearance update unresolved widget state', async t => {
-    const ctx = setup(t, shortRef(ID_A));
+    const ctx = setup(t, fileRef(ID_A));
 
     ctx.service.rebuildReferenceIndex([]);
     await flushReferenceRefresh();
@@ -608,8 +601,8 @@ test('index removal and reappearance update unresolved widget state', async t =>
 });
 
 test('separate editor instances respond independently to a shared index', async t => {
-    const first = setup(t, shortRef(ID_A));
-    const second = setup(t, shortRef(ID_A), {
+    const first = setup(t, fileRef(ID_A));
+    const second = setup(t, fileRef(ID_A), {
         sharedService: first.service,
     });
 
@@ -627,7 +620,7 @@ test('separate editor instances respond independently to a shared index', async 
 });
 
 test('destroy before queued refresh prevents dispatch and unsubscribes', async t => {
-    const ctx = setup(t, shortRef(ID_A));
+    const ctx = setup(t, fileRef(ID_A));
     ctx.service.rebuildReferenceIndex([]);
     ctx.plugin.destroy();
 
@@ -640,7 +633,7 @@ test('destroy before queued refresh prevents dispatch and unsubscribes', async t
 });
 
 test('Source Mode receives refresh signals but keeps raw references undecorated', async t => {
-    const ctx = setup(t, shortRef(ID_A), { live: false });
+    const ctx = setup(t, fileRef(ID_A), { live: false });
     ctx.service.rebuildReferenceIndex([]);
     await flushReferenceRefresh();
 
@@ -650,7 +643,7 @@ test('Source Mode receives refresh signals but keeps raw references undecorated'
 
 
 test('Live Preview renders only references in a dedicated tree fence and normal prose', t => {
-    const ref = shortRef(ID_A);
+    const ref = fileRef(ID_A);
     const text = [
         '```typescript',
         ref,
@@ -680,7 +673,7 @@ test('Live Preview renders only references in a dedicated tree fence and normal 
 });
 
 test('tree body detection respects fence length, marker type, and closing fence', t => {
-    const ref = shortRef(ID_A);
+    const ref = fileRef(ID_A);
     const text = [
         '````file-pilot-tree',
         ref,
@@ -708,7 +701,7 @@ test('tree body detection respects fence length, marker type, and closing fence'
 });
 
 test('tree fence markers are not treated as tree body text', t => {
-    const ref = shortRef(ID_A);
+    const ref = fileRef(ID_A);
     const text = [
         '```file-pilot-tree ' + ref,
         '├── ' + ref,
@@ -731,7 +724,7 @@ test('tree fence markers are not treated as tree body text', t => {
 });
 
 test('tree references remain raw in Source Mode', t => {
-    const ref = shortRef(ID_A);
+    const ref = fileRef(ID_A);
     const text = ['```file-pilot-tree', '├── ' + ref, '```'].join('\n');
     const ctx = setup(t, text, { live: false });
 
@@ -740,7 +733,7 @@ test('tree references remain raw in Source Mode', t => {
 });
 
 test('rebuilding decorations after an edited tree fence updates the rendered references', t => {
-    const ref = shortRef(ID_A);
+    const ref = fileRef(ID_A);
     const before = ['```file-pilot-tree', ref, '```'].join('\n');
     const after = ['```text', ref, '```'].join('\n');
     const ctx = setup(t, before, {

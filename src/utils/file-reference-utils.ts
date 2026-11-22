@@ -1,56 +1,28 @@
 
-import { createHash } from "node:crypto";
+export type ParsedFileReference = {
+	id: string;
+}
 
-const SHORT_KEY_LENGTH = 12;
-export type ParsedFileReference =
-	| { kind: "short"; key: string }
-	| { kind: "full"; id: string };
-
-// Validate a complete short reference with a 12-character key.
-const SHORT_REFERENCE_PATTERN =
+// Match a reference containing a 12-character FileRecord ID.
+const FILE_REFERENCE_PATTERN =
 	/^\|\|\|@([A-Za-z0-9_-]{12})\|\|\|$/;
-
-// Validate a complete full reference containing a UUID.
-const FULL_REFERENCE_PATTERN =
-	/^\|\|\|!([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\|\|\|$/i;
 
 // Find reference candidates in text, excluding extra pipes and line breaks.
 // Candidates must be validated by parseFileReference().
 const REFERENCE_CANDIDATE_PATTERN =
 	/(?<!\|)\|\|\|[^|\r\n]*\|\|\|(?!\|)/g;
-export function generateShortKey(id: string): string {
-	// convert long id to short key
-	const normalizedId = id.toLowerCase();
 
-	return createHash("sha256")
-		.update(normalizedId, "utf8")
-		.digest("base64url")
-		.slice(0, SHORT_KEY_LENGTH);
-}
-
+// Parse a reference and preserve the ID's case.
 export function parseFileReference(
 	text: string,
 ): ParsedFileReference | null {
-	const normalizedText = text.trim();
-	const shortMatch = SHORT_REFERENCE_PATTERN.exec(normalizedText);
+	const match = FILE_REFERENCE_PATTERN.exec(text.trim());
 
-	if (shortMatch?.[1] !== undefined) {
-		return {
-			kind: "short",
-			key: shortMatch[1],
-		};
+	if (match?.[1] === undefined) {
+		return null;
 	}
 
-	const fullMatch = FULL_REFERENCE_PATTERN.exec(normalizedText);
-
-	if (fullMatch?.[1] !== undefined) {
-		return {
-			kind: "full",
-			id: fullMatch[1].toLowerCase(),
-		};
-	}
-
-	return null;
+	return { id: match[1] };
 }
 
 export interface FileReferenceMatch {

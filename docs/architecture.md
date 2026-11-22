@@ -23,6 +23,10 @@ flowchart TD
     ReadingRenderer -->|"Resolve references"| Reference
     EditorExtension -->|"Resolve references"| Reference
     Suggest -->|"Format references"| Reference
+    Reference -->|"Parse references"| ReferenceUtils["FileReferenceUtils"]
+    ReadingRenderer -->|"Find references"| ReferenceUtils
+    EditorExtension -->|"Find references"| ReferenceUtils
+    Suggest -->|"Detect completed references"| ReferenceUtils
     ReadingRenderer -->|"Create interactive element"| ReferenceElement["FileReferenceElement"]
     EditorExtension -->|"Create interactive element"| ReferenceElement
     ReferenceElement -->|"Resolve current record"| Reference

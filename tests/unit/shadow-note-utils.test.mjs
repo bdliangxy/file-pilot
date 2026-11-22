@@ -24,10 +24,10 @@ test('generates Shadow Note names using parent folders', () => {
 	assert.equal(generateShadowNoteName(relativePath, 3), null);
 });
 
-test('generates a UUID-suffixed name when requested', () => {
+test('generates an ID-suffixed name when requested', () => {
 	assert.equal(
-		generateShadowNoteName('projects/docs/report.pdf', 3, 'file-123'),
-		'report.pdf-file-123.md',
+		generateShadowNoteName('projects/docs/report.pdf', 3, 'Ab7Xc9Km2LdQ'),
+		'report.pdf-Ab7Xc9Km2LdQ.md',
 	);
 });
 

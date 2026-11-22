@@ -15,10 +15,9 @@ const jiti = createJiti(import.meta.url, {
 });
 const { FileReferenceSuggest } = await jiti.import('../../src/ui/file-reference-suggest.ts');
 const { FileReferenceService } = await jiti.import('../../src/core/file-reference-service.ts');
-const { generateShortKey } = await jiti.import('../../src/utils/file-reference-utils.ts');
 
-const ID_A = '550e8400-e29b-41d4-a716-446655440000';
-const ID_B = '6fa459ea-ee8a-3ca4-894e-db77e160355e';
+const ID_A = 'Ab7Xc9Km2LdQ';
+const ID_B = 'Zk3Mr6Tn8PwV';
 
 // Keep animation frames inert in tests that do not explicitly control scheduling.
 globalThis.window ??= {
@@ -143,27 +142,27 @@ test('suggestion rendering distinguishes folders and missing files', () => {
     assert.equal(folderRoot.children[1].text, 'docs/Assets');
 });
 
-test('selection replaces only trigger text with a stable short reference', () => {
+test('selection replaces only trigger text with a stable file reference', () => {
     const record = makeFileRecord(ID_A);
     const { suggest } = makeSuggest([record]);
     const editor = makeEditor('before |||report');
     openSearch(suggest, editor);
     suggest.selectSuggestion(record, {});
-    assert.equal(editor.text, 'before |||@' + generateShortKey(ID_A) + '|||');
+    assert.equal(editor.text, 'before |||@' + ID_A + '|||');
     assert.equal(editor.replacements.length, 1);
     assert.equal(editor.replacements[0].start.ch, 7);
     assert.equal(editor.replacements[0].end.ch, 16);
     assert.equal(suggest.context, null);
 });
 
-test('selection falls back to full UUID when the short key is ambiguous', () => {
+test('selection preserves the case of distinct FileRecord IDs', () => {
     const first = makeFileRecord(ID_A, { path: 'first.pdf' });
-    const duplicate = makeFileRecord(ID_A.toUpperCase(), { path: 'second.pdf' });
-    const { suggest } = makeSuggest([first, duplicate]);
+    const second = makeFileRecord(ID_A.toLowerCase(), { path: 'second.pdf' });
+    const { suggest } = makeSuggest([first, second]);
     const editor = makeEditor('|||second');
     openSearch(suggest, editor);
-    suggest.selectSuggestion(duplicate, {});
-    assert.equal(editor.text, '|||!' + duplicate.id + '|||');
+    suggest.selectSuggestion(second, {});
+    assert.equal(editor.text, '|||@' + second.id + '|||');
 });
 
 test('selection does not insert a record removed from the reference index', () => {
@@ -593,7 +592,7 @@ test('triple-pipe suggestions open and insert references inside a tree fence', (
     suggest.selectSuggestion(record, {});
     assert.equal(
         editor.getLine(2),
-        '├── |||@' + generateShortKey(ID_A) + '|||',
+        '├── |||@' + ID_A + '|||',
     );
     assert.equal(editor.getLine(1), 'Project/');
     assert.equal(editor.getLine(3), '```');

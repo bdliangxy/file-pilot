@@ -18,7 +18,6 @@ const jiti = createJiti(import.meta.url, {
     },
 });
 const { default: FilePilotPlugin } = await jiti.import('../../src/main.ts');
-const { generateShortKey } = await jiti.import('../../src/utils/file-reference-utils.ts');
 
 const ID_A = 'Ab7Xc9Km2LdQ';
 const ID_B = 'Zk3Mr6Tn8PwV';
@@ -122,7 +121,7 @@ async function setup(t, { records = [], scannedFileNames = [] } = {}) {
 
 function lookup(plugin, id) {
     return plugin.fileReferenceService.resolveFileReference(
-        `|||@${generateShortKey(id)}|||`,
+        `|||@${id}|||`,
     );
 }
 
@@ -220,7 +219,7 @@ test('unrelated note deletions leave the reference index unchanged', async (t) =
     assert.equal(lookup(plugin, ID_A).kind, 'found');
 });
 
-test('clearUserData resets both reference indexes after persisted reset', async (t) => {
+test('clearUserData resets the reference index after persisted reset', async (t) => {
     const record = makeFileRecord(ID_A);
     const { plugin } = await setup(t, { records: [record] });
     assert.equal(lookup(plugin, ID_A).kind, 'found');

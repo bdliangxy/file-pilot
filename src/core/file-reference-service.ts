@@ -1,27 +1,19 @@
 
 import type { FileRecord } from "./file-interface";
 import {
-	generateShortKey,
 	parseFileReference,
 } from "../utils/file-reference-utils";
 
 // found:     The matching file was found.
 // missing:   The reference format is valid, but no such record exists.
-// ambiguous: The short key is ambiguous (collision).
-export type ShortKeyLookupResult =
-	| { kind: "found"; record: FileRecord }
-	| { kind: "missing" }
-	| { kind: "ambiguous" };
-
 // invalid:   The reference syntax is invalid.
 export type FileReferenceLookupResult =
-	| ShortKeyLookupResult
+	| { kind: "found"; record: FileRecord }
+	| { kind: "missing" }
 	| { kind: "invalid" };
 
 export class FileReferenceService {
-	// keyIndex: Look up FileRecord by short key and handle collisions.
-	private keyIndex = new Map<string, FileRecord | null>();
-	// idIndex: Look up FileRecord by full UUID.
+	// Look up FileRecords by their case-sensitive IDs.
 	private idIndex = new Map<string, FileRecord>();
 
 	private readonly indexChangedListeners = new Set<() => void>();
@@ -36,57 +28,32 @@ export class FileReferenceService {
 		};
 	}
 
-	// Rebuild the in-memory index from current FileRecords.
+	// Rebuild the index without silently overwriting duplicate IDs.
 	rebuildReferenceIndex(records: readonly FileRecord[]): void {
-		const nextKeyIndex = new Map<string, FileRecord | null>();
-		const nextIdIndex = new Map<string, FileRecord>();
+		const nextIndex = new Map<string, FileRecord>();
 
 		for (const record of records) {
-			const key = generateShortKey(record.id);
-
-			// Build the UUID lookup index.
-			nextIdIndex.set(record.id.toLowerCase(), record);
-
-			// Build the short-key lookup index.
-			if (nextKeyIndex.has(key)) {
-				nextKeyIndex.set(key, null);
-			} else {
-				nextKeyIndex.set(key, record);
+			if (nextIndex.has(record.id)) {
+				throw new Error(`Duplicate FileRecord ID: ${record.id}`);
 			}
+
+			nextIndex.set(record.id, record);
 		}
 
-		this.keyIndex = nextKeyIndex;
-		this.idIndex = nextIdIndex;
-		// Notify subscribers only after publishing both indexes.
+		this.idIndex = nextIndex;
+
 		for (const listener of this.indexChangedListeners) {
 			listener();
 		}
 	}
 
-
-	// Resolve a short key without selecting an ambiguous record.
-	resolveShortKey(key: string): ShortKeyLookupResult {
-		const record = this.keyIndex.get(key);
-
-		if (record === undefined) {
-			return { kind: "missing" };
-		}
-
-		if (record === null) {
-			return { kind: "ambiguous" };
-		}
-
-		return {
-			kind: "found",
-			record,
-		};
-	}
-
+	// Resolve a FileRecord by its stable ID.
 	resolveFileId(id: string): FileRecord | undefined {
-		return this.idIndex.get(id.toLowerCase());
+		return this.idIndex.get(id);
 	}
 
 
+	// Parse a reference and resolve its FileRecord.
 	resolveFileReference(text: string): FileReferenceLookupResult {
 		const reference = parseFileReference(text);
 
@@ -94,42 +61,21 @@ export class FileReferenceService {
 			return { kind: "invalid" };
 		}
 
-		switch (reference.kind) {
-			case "short":
-				return this.resolveShortKey(reference.key);
+		const record = this.resolveFileId(reference.id);
 
-			case "full": {
-				const record = this.resolveFileId(reference.id);
-
-				return record === undefined
-					? { kind: "missing" }
-					: { kind: "found", record };
-			}
-		}
+		return record === undefined
+			? { kind: "missing" }
+			: { kind: "found", record };
 	}
 
 
-	/**
-	 * Generate a file reference from a FileRecord ID.
-	 * Use a short key when unique; otherwise fall back to the full UUID.
-	 */
+	// Format a reference for an indexed FileRecord.
 	formatFileReference(id: string): string | null {
-		const record = this.resolveFileId(id);
-		if (!record) {
+		if (!this.idIndex.has(id)) {
 			return null;
 		}
 
-		const key = generateShortKey(record.id);
-		const result = this.resolveShortKey(key);
-
-		if (
-			result.kind === "found" &&
-			result.record.id === record.id
-		) {
-			return `|||@${key}|||`;
-		}
-
-		return `|||!${record.id}|||`;
+		return `|||@${id}|||`;
 	}
 
 }

@@ -27,13 +27,6 @@ export function getFileReferenceDisplay(
 				hint: t("fileReferenceNotFoundHint"),
 			};
 
-		case "ambiguous":
-			return {
-				text: t("fileReferenceAmbiguous"),
-				unresolved: true,
-				hint: t("fileReferenceAmbiguousHint"),
-			};
-
 		case "found": {
 
 			const fileName = getFullName(result.record.path);

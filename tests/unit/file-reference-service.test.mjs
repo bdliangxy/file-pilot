@@ -7,117 +7,80 @@ const jiti = createJiti(import.meta.url);
 const { FileReferenceService } = await jiti.import(
     '../../src/core/file-reference-service.ts',
 );
-const { generateShortKey } = await jiti.import(
-    '../../src/utils/file-reference-utils.ts',
-);
 
-const ID_A = '550e8400-e29b-41d4-a716-446655440000';
-const ID_B = '6fa459ea-ee8a-3ca4-894e-db77e160355e';
+const ID_A = 'Ab7Xc9Km2LdQ';
+const ID_B = 'Zk3Mr6Tn8PwV';
+const fileRef = id => '|||@' + id + '|||';
 
-test('resolves short keys to the correct FileRecord references', () => {
-    const first = makeFileRecord(ID_A, { path: 'docs/report.pdf' });
+test('resolves FileRecords by their exact IDs', () => {
+    const first = makeFileRecord(ID_A);
     const second = makeFileRecord(ID_B, { path: 'assets/image.png' });
     const service = new FileReferenceService();
-
     service.rebuildReferenceIndex([first, second]);
 
-    assert.deepEqual(service.resolveShortKey(generateShortKey(ID_A)), {
-        kind: 'found',
-        record: first,
+    assert.strictEqual(service.resolveFileId(ID_A), first);
+    assert.strictEqual(service.resolveFileId(ID_B), second);
+    assert.deepEqual(service.resolveFileReference(fileRef(ID_A)), {
+        kind: 'found', record: first,
     });
-    assert.deepEqual(service.resolveShortKey(generateShortKey(ID_B)), {
-        kind: 'found',
-        record: second,
+    assert.deepEqual(service.resolveFileReference(fileRef(ID_B)), {
+        kind: 'found', record: second,
     });
-    assert.strictEqual(service.resolveShortKey(generateShortKey(ID_A)).record, first);
 });
 
-test('resolves full UUIDs without case sensitivity', () => {
-    const record = makeFileRecord(ID_A);
-    const service = new FileReferenceService();
-
-    service.rebuildReferenceIndex([record]);
-
-    assert.strictEqual(service.resolveFileId(ID_A), record);
-    assert.strictEqual(service.resolveFileId(ID_A.toUpperCase()), record);
-});
-
-test('returns missing for unknown keys and undefined for unknown UUIDs', () => {
-    const service = new FileReferenceService();
-
-    assert.deepEqual(service.resolveShortKey(generateShortKey(ID_A)), {
-        kind: 'missing',
-    });
-    assert.equal(service.resolveFileId(ID_A), undefined);
-
-    service.rebuildReferenceIndex([makeFileRecord(ID_B)]);
-
-    assert.deepEqual(service.resolveShortKey(generateShortKey(ID_A)), {
-        kind: 'missing',
-    });
-    assert.equal(service.resolveFileId(ID_A), undefined);
-});
-
-test('marks colliding short keys as ambiguous regardless of record order', () => {
-    // Repeated IDs are intentionally used to exercise the collision branch.
-    // Persisted FileRecords must have unique UUIDs.
-    const first = makeFileRecord(ID_A, { path: 'docs/first.pdf' });
-    const second = makeFileRecord(ID_A.toUpperCase(), { path: 'docs/second.pdf' });
-    const third = makeFileRecord(ID_A, { path: 'docs/third.pdf' });
-    const service = new FileReferenceService();
-    const key = generateShortKey(ID_A);
-
-    for (const records of [[first, second], [second, first], [first, second, third]]) {
-        service.rebuildReferenceIndex(records);
-        assert.deepEqual(service.resolveShortKey(key), { kind: 'ambiguous' });
-    }
-});
-
-test('rebuilding clears stale records and restores previously ambiguous keys', () => {
+test('resolves distinct IDs that differ only in case', () => {
     const first = makeFileRecord(ID_A);
-    const duplicate = makeFileRecord(ID_A, { path: 'docs/duplicate.pdf' });
+    const second = makeFileRecord(ID_A.toLowerCase(), { path: 'other.pdf' });
+    const service = new FileReferenceService();
+    service.rebuildReferenceIndex([first, second]);
+
+    assert.strictEqual(service.resolveFileId(first.id), first);
+    assert.strictEqual(service.resolveFileId(second.id), second);
+    for (const record of [first, second]) {
+        assert.equal(service.formatFileReference(record.id), fileRef(record.id));
+        assert.strictEqual(service.resolveFileReference(fileRef(record.id)).record, record);
+    }
+    assert.equal(service.resolveFileId(ID_A.toUpperCase()), undefined);
+    assert.equal(service.formatFileReference(ID_A.toUpperCase()), null);
+    assert.deepEqual(service.resolveFileReference(fileRef(ID_A.toUpperCase())), { kind: 'missing' });
+});
+
+test('formats references only for currently indexed records', () => {
+    const service = new FileReferenceService();
+    assert.equal(service.formatFileReference(ID_A), null);
+    service.rebuildReferenceIndex([makeFileRecord(ID_A)]);
+    assert.equal(service.formatFileReference(ID_A), fileRef(ID_A));
+    assert.equal(service.formatFileReference(ID_B), null);
+});
+
+test('rebuilding removes stale records and clears the index', () => {
+    const first = makeFileRecord(ID_A);
     const replacement = makeFileRecord(ID_B);
     const service = new FileReferenceService();
-
-    service.rebuildReferenceIndex([first, duplicate]);
-    assert.deepEqual(service.resolveShortKey(generateShortKey(ID_A)), {
-        kind: 'ambiguous',
-    });
-
-    service.rebuildReferenceIndex([replacement]);
-    assert.equal(service.resolveFileId(ID_A), undefined);
-    assert.deepEqual(service.resolveShortKey(generateShortKey(ID_A)), {
-        kind: 'missing',
-    });
-    assert.strictEqual(service.resolveFileId(ID_B), replacement);
-
     service.rebuildReferenceIndex([first]);
-    assert.deepEqual(service.resolveShortKey(generateShortKey(ID_A)), {
-        kind: 'found',
-        record: first,
-    });
+    service.rebuildReferenceIndex([replacement]);
+
+    assert.equal(service.resolveFileId(ID_A), undefined);
+    assert.equal(service.formatFileReference(ID_A), null);
+    assert.deepEqual(service.resolveFileReference(fileRef(ID_A)), { kind: 'missing' });
+    assert.strictEqual(service.resolveFileId(ID_B), replacement);
+    service.rebuildReferenceIndex([]);
+    assert.equal(service.resolveFileId(ID_B), undefined);
+    assert.equal(service.formatFileReference(ID_B), null);
 });
 
-test('rebuilding reflects changed record metadata without changing its short key', () => {
-    const original = makeFileRecord(ID_A, {
-        path: 'docs/original.pdf',
-        status: 'available',
-    });
-    const updated = makeFileRecord(ID_A, {
-        path: 'docs/renamed.pdf',
-        status: 'missing',
-    });
+test('rebuilding reflects changed metadata without changing the reference', () => {
+    const original = makeFileRecord(ID_A, { path: 'docs/original.pdf' });
+    const updated = makeFileRecord(ID_A, { path: 'docs/renamed.pdf', status: 'missing' });
     const service = new FileReferenceService();
-    const key = generateShortKey(ID_A);
 
     service.rebuildReferenceIndex([original]);
+    const reference = service.formatFileReference(ID_A);
     service.rebuildReferenceIndex([updated]);
 
+    assert.equal(service.formatFileReference(ID_A), reference);
     assert.strictEqual(service.resolveFileId(ID_A), updated);
-    assert.deepEqual(service.resolveShortKey(key), {
-        kind: 'found',
-        record: updated,
-    });
+    assert.deepEqual(service.resolveFileReference(reference), { kind: 'found', record: updated });
 });
 
 test('rebuilding does not modify the input array or records', () => {
@@ -129,81 +92,45 @@ test('rebuilding does not modify the input array or records', () => {
     assert.strictEqual(service.resolveFileId(ID_A), record);
 });
 
-test('resolves complete short and full references', () => {
+test('resolves complete references with surrounding whitespace', () => {
     const record = makeFileRecord(ID_A);
     const service = new FileReferenceService();
     service.rebuildReferenceIndex([record]);
 
-    const shortKey = generateShortKey(ID_A);
-    for (const text of [
-        `|||@${shortKey}|||`,
-        ` |||@${shortKey}||| `,
-        `|||!${ID_A}|||`,
-        `  |||!${ID_A.toUpperCase()}|||  `,
-    ]) {
-        assert.deepEqual(
-            service.resolveFileReference(text),
-            { kind: 'found', record },
-        );
+    for (const text of [fileRef(ID_A), '  ' + fileRef(ID_A) + '  ']) {
+        assert.deepEqual(service.resolveFileReference(text), { kind: 'found', record });
     }
 });
 
-test('returns invalid for malformed references', () => {
+test('returns invalid for malformed and obsolete references', () => {
     const service = new FileReferenceService();
-    const invalidReferences = [
-        '',
-        'invalid',
-        '|||@abc|||',
-        '|||!invalid|||',
-        '|||@abcdefghijkl||',
-        'text |||@abcdefghijkl||| text',
-    ];
-
-    for (const text of invalidReferences) {
-        assert.deepEqual(
-            service.resolveFileReference(text),
-            { kind: 'invalid' },
-        );
+    for (const text of [
+        '', 'invalid', '|||@abc|||', '|||!invalid|||',
+        '|||!550e8400-e29b-41d4-a716-446655440000|||',
+        '|||@abcdefghijkl||', 'text |||@abcdefghijkl||| text',
+    ]) {
+        assert.deepEqual(service.resolveFileReference(text), { kind: 'invalid' });
     }
 });
 
 test('returns missing for valid but unknown references', () => {
     const service = new FileReferenceService();
+    assert.deepEqual(service.resolveFileReference(fileRef(ID_A)), { kind: 'missing' });
     service.rebuildReferenceIndex([makeFileRecord(ID_B)]);
-
-    assert.deepEqual(
-        service.resolveFileReference(`|||@${generateShortKey(ID_A)}|||`),
-        { kind: 'missing' },
-    );
-    assert.deepEqual(
-        service.resolveFileReference(`|||!${ID_A}|||`),
-        { kind: 'missing' },
-    );
+    assert.deepEqual(service.resolveFileReference(fileRef(ID_A)), { kind: 'missing' });
+    assert.equal(service.resolveFileId(ID_A), undefined);
 });
 
-test('returns ambiguous for colliding short references', () => {
-    // Repeated UUIDs are only used here to force an ambiguous lookup.
-    const first = makeFileRecord(ID_A);
-    const second = makeFileRecord(ID_A, { path: 'docs/another.pdf' });
-    const service = new FileReferenceService();
-    service.rebuildReferenceIndex([first, second]);
-
-    assert.deepEqual(
-        service.resolveFileReference(`|||@${generateShortKey(ID_A)}|||`),
-        { kind: 'ambiguous' },
-    );
-});
-
-test('index change listeners observe fully published short and full indexes', () => {
+test('index change listeners observe the published index', () => {
     const service = new FileReferenceService();
     const first = makeFileRecord(ID_A, { path: 'docs/old.pdf' });
     const updated = makeFileRecord(ID_A, { path: 'docs/new.pdf' });
     const snapshots = [];
-
     const unsubscribe = service.onIndexChanged(() => {
         snapshots.push({
-            short: service.resolveShortKey(generateShortKey(ID_A)),
-            full: service.resolveFileId(ID_A),
+            record: service.resolveFileId(ID_A),
+            reference: service.formatFileReference(ID_A),
+            lookup: service.resolveFileReference(fileRef(ID_A)),
         });
     });
 
@@ -211,13 +138,11 @@ test('index change listeners observe fully published short and full indexes', ()
     service.rebuildReferenceIndex([updated]);
     service.rebuildReferenceIndex([]);
 
-    assert.equal(snapshots.length, 3);
-    assert.strictEqual(snapshots[0].short.record, first);
-    assert.strictEqual(snapshots[0].full, first);
-    assert.strictEqual(snapshots[1].short.record, updated);
-    assert.strictEqual(snapshots[1].full, updated);
-    assert.deepEqual(snapshots[2].short, { kind: 'missing' });
-    assert.equal(snapshots[2].full, undefined);
+    assert.deepEqual(snapshots, [
+        { record: first, reference: fileRef(ID_A), lookup: { kind: 'found', record: first } },
+        { record: updated, reference: fileRef(ID_A), lookup: { kind: 'found', record: updated } },
+        { record: undefined, reference: null, lookup: { kind: 'missing' } },
+    ]);
 
     unsubscribe();
 });
@@ -236,4 +161,30 @@ test('index listeners unsubscribe independently without affecting other listener
     service.rebuildReferenceIndex([makeFileRecord(ID_B)]);
 
     assert.deepEqual(calls, ['first', 'second', 'second']);
+});
+
+test('rejects duplicate IDs without replacing the current index', () => {
+    const service = new FileReferenceService();
+    const original = makeFileRecord(ID_A);
+    service.rebuildReferenceIndex([original]);
+
+    let notifications = 0;
+    const unsubscribe = service.onIndexChanged(() => {
+        notifications++;
+    });
+
+    const first = makeFileRecord(ID_B, { path: 'first.pdf' });
+    const duplicate = makeFileRecord(ID_B, { path: 'second.pdf' });
+
+    assert.throws(
+        () => service.rebuildReferenceIndex([first, duplicate]),
+        /Duplicate FileRecord ID/,
+    );
+    assert.strictEqual(service.resolveFileId(ID_A), original);
+    assert.equal(service.formatFileReference(ID_A), fileRef(ID_A));
+    assert.equal(service.resolveFileId(ID_B), undefined);
+    assert.equal(service.formatFileReference(ID_B), null);
+    assert.equal(notifications, 0);
+
+    unsubscribe();
 });

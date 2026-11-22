@@ -105,8 +105,6 @@ export const zh = {
 	// File reference rendering
 	fileReferenceNotFound: '该文件未被记录',
 	fileReferenceNotFoundHint: '没有与此引用匹配的受管理文件。',
-	fileReferenceAmbiguous: '文件引用存在歧义',
-	fileReferenceAmbiguousHint: '多个受管理文件具有相同的引用短 Key。',
 	fileReferenceCursorMoved: '文件引用插入位置被移动，请重新尝试',
 	insertFileReferenceCommand: '文件引用',
 	updatePortalNoteTreeCommand: '更新目录树',

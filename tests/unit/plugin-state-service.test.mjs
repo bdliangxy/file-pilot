@@ -643,3 +643,26 @@ test('failed project-name persistence preserves the previous value', async () =>
     assert.equal(service.getProjectName(), 'Old');
     assert.equal(service.getPreviousProjectName(), null);
 });
+
+test('preserves FileRecord IDs across persistence and reload', async () => {
+    const records = [
+        makeFileRecord('Ab7Xc9Km2LdQ'),
+        makeFileRecord('ab7Xc9Km2LdQ', { path: 'other.pdf' }),
+    ];
+
+    const { service, savedData } = createPluginStateServiceTestContext(
+        PluginStateService,
+        makePluginData(),
+    );
+    await service.load();
+    await service.addFileRecords(records);
+
+    const reloaded = createPluginStateServiceTestContext(
+        PluginStateService,
+        savedData.at(-1),
+    );
+    await reloaded.service.load();
+
+    assert.deepEqual(reloaded.service.getFileRecords(), records);
+    assert.equal(reloaded.savedData.length, 0);
+});

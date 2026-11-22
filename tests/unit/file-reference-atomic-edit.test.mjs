@@ -19,14 +19,11 @@ const { createFileReferenceEditorExtension } = await jiti.import(
 const { FileReferenceService } = await jiti.import(
     '../../src/core/file-reference-service.ts',
 );
-const { generateShortKey } = await jiti.import(
-    '../../src/utils/file-reference-utils.ts',
-);
 
-const ID_A = '550e8400-e29b-41d4-a716-446655440000';
-const ID_B = '6fa459ea-ee8a-3ca4-894e-db77e160355e';
-const REF_A = `|||@${generateShortKey(ID_A)}|||`;
-const REF_B = `|||@${generateShortKey(ID_B)}|||`;
+const ID_A = 'Ab7Xc9Km2LdQ';
+const ID_B = 'Zk3Mr6Tn8PwV';
+const REF_A = `|||@${ID_A}|||`;
+const REF_B = `|||@${ID_B}|||`;
 
 // Use the real CodeMirror state and transaction engine, with a lightweight view.
 function editor(text, { live = true, exclusions = [] } = {}) {

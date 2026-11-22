@@ -14,14 +14,14 @@ function setup(existingPaths = []) {
 
 test('uses the file name when no Shadow Note name conflicts', () => {
 	const { service, lookedUpPaths } = setup();
-	const path = service.getAvailableShadowNotePath('docs/report.pdf', 'file-1');
+	const path = service.getAvailableShadowNotePath('docs/report.pdf', 'Ab7Xc9Km2LdQ');
 	assert.equal(path, 'ShadowNotes/report.pdf.md');
 	assert.deepEqual(lookedUpPaths, ['ShadowNotes/report.pdf.md']);
 });
 
 test('adds parent folder names when the first candidate conflicts', () => {
 	const { service, lookedUpPaths } = setup(['ShadowNotes/report.pdf.md']);
-	const path = service.getAvailableShadowNotePath('docs/report.pdf', 'file-1');
+	const path = service.getAvailableShadowNotePath('docs/report.pdf', 'Ab7Xc9Km2LdQ');
 	assert.equal(path, 'ShadowNotes/docs_report.pdf.md');
 	assert.deepEqual(lookedUpPaths, [
 		'ShadowNotes/report.pdf.md',
@@ -29,13 +29,13 @@ test('adds parent folder names when the first candidate conflicts', () => {
 	]);
 });
 
-test('falls back to UUID-suffixed name when all parent candidates conflict', () => {
+test('falls back to an ID-suffixed name when all parent candidates conflict', () => {
 	const { service, lookedUpPaths } = setup([
 		'ShadowNotes/report.pdf.md',
 		'ShadowNotes/docs_report.pdf.md',
 	]);
-	const path = service.getAvailableShadowNotePath('docs/report.pdf', 'file-123');
-	assert.equal(path, 'ShadowNotes/report.pdf-file-123.md');
+	const path = service.getAvailableShadowNotePath('docs/report.pdf', 'Ab7Xc9Km2LdQ');
+	assert.equal(path, 'ShadowNotes/report.pdf-Ab7Xc9Km2LdQ.md');
 	assert.deepEqual(lookedUpPaths, [
 		'ShadowNotes/report.pdf.md',
 		'ShadowNotes/docs_report.pdf.md',
@@ -45,7 +45,7 @@ test('falls back to UUID-suffixed name when all parent candidates conflict', () 
 test('generates Shadow Note paths for folder paths', () => {
     const { service } = setup();
     assert.equal(
-        service.getAvailableShadowNotePath('Projects/Reports', 'folder-1'),
+        service.getAvailableShadowNotePath('Projects/Reports', 'Zk3Mr6Tn8PwV'),
         'ShadowNotes/Reports.md',
     );
 });
@@ -53,7 +53,7 @@ test('generates Shadow Note paths for folder paths', () => {
 test('resolves folder path naming collisions using parent names', () => {
     const { service } = setup(['ShadowNotes/Reports.md']);
     assert.equal(
-        service.getAvailableShadowNotePath('Projects/Reports', 'folder-1'),
+        service.getAvailableShadowNotePath('Projects/Reports', 'Zk3Mr6Tn8PwV'),
         'ShadowNotes/Projects_Reports.md',
     );
 });

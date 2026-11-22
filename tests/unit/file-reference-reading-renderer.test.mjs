@@ -14,12 +14,10 @@ const jiti = createJiti(import.meta.url, {
 });
 const { FileReferenceReadingRenderer } = await jiti.import('../../src/ui/file-reference-reading-renderer.ts');
 const { FileReferenceService } = await jiti.import('../../src/core/file-reference-service.ts');
-const { generateShortKey } = await jiti.import('../../src/utils/file-reference-utils.ts');
 
-const ID_A = '550e8400-e29b-41d4-a716-446655440000';
-const ID_B = '6fa459ea-ee8a-3ca4-894e-db77e160355e';
-const shortRef = id => '|||@' + generateShortKey(id) + '|||';
-const fullRef = id => '|||!' + id + '|||';
+const ID_A = 'Ab7Xc9Km2LdQ';
+const ID_B = 'Zk3Mr6Tn8PwV';
+const fileRef = id => '|||@' + id + '|||';
 
 function setup(t, records = [makeFileRecord(ID_A)]) {
     const dom = new JSDOM('<!doctype html><html><body></body></html>');
@@ -94,11 +92,11 @@ async function flush() {
     await new Promise(resolve => setImmediate(resolve));
 }
 
-test('renders short and full references with current file names', (t) => {
+test('renders file references with current file names', (t) => {
     const first = makeFileRecord(ID_A, { path: 'docs/report.pdf' });
     const second = makeFileRecord(ID_B, { path: 'assets/logo.png' });
     const ctx = setup(t, [first, second]);
-    const p = paragraph(ctx, 'Read ' + shortRef(ID_A) + ' and ' + fullRef(ID_B) + ' today.');
+    const p = paragraph(ctx, 'Read ' + fileRef(ID_A) + ' and ' + fileRef(ID_B) + ' today.');
     ctx.renderer.render(ctx.document.body);
     assert.equal(p.textContent, 'Read report.pdf and logo.png today.');
     assert.deepEqual(references(ctx).map(el => el.textContent), ['report.pdf', 'logo.png']);
@@ -110,7 +108,7 @@ test('previews the Shadow Note while displaying the real file name', (t) => {
         shadowNotePath: 'ShadowNotes/architecture.md',
     });
     const ctx = setup(t, [record]);
-    paragraph(ctx, shortRef(ID_A));
+    paragraph(ctx, fileRef(ID_A));
     ctx.renderer.render(ctx.document.body);
     const element = references(ctx)[0];
 
@@ -130,7 +128,7 @@ test('previews the Shadow Note while displaying the real file name', (t) => {
 test('reuses the hover parent and resolves the latest Shadow Note path', (t) => {
     const original = makeFileRecord(ID_A);
     const ctx = setup(t, [original]);
-    paragraph(ctx, shortRef(ID_A));
+    paragraph(ctx, fileRef(ID_A));
     ctx.renderer.render(ctx.document.body);
     const element = references(ctx)[0];
 
@@ -152,7 +150,7 @@ test('reuses the hover parent and resolves the latest Shadow Note path', (t) => 
 test('does not preview when the Shadow Note is absent or the reference is removed', (t) => {
     const record = makeFileRecord(ID_A);
     const ctx = setup(t, [record]);
-    paragraph(ctx, shortRef(ID_A));
+    paragraph(ctx, fileRef(ID_A));
     ctx.renderer.render(ctx.document.body);
     const element = references(ctx)[0];
 
@@ -169,7 +167,7 @@ test('does not preview when the Shadow Note is absent or the reference is remove
 test('previews a Shadow Note even when its source file is missing', (t) => {
     const record = makeFileRecord(ID_A, { status: 'missing' });
     const ctx = setup(t, [record]);
-    paragraph(ctx, shortRef(ID_A));
+    paragraph(ctx, fileRef(ID_A));
     ctx.renderer.render(ctx.document.body);
     const element = references(ctx)[0];
 
@@ -181,7 +179,7 @@ test('previews a Shadow Note even when its source file is missing', (t) => {
 
 test('preserves malformed candidates and ignores inline code, code blocks and links', (t) => {
     const ctx = setup(t);
-    const raw = shortRef(ID_A);
+    const raw = fileRef(ID_A);
     const p = paragraph(ctx, 'before |||@bad||| after ' + raw);
     for (const tag of ['code', 'pre', 'a']) {
         const el = ctx.document.createElement(tag);
@@ -198,7 +196,7 @@ test('preserves malformed candidates and ignores inline code, code blocks and li
 
 test('does not duplicate existing reference elements when reprocessing', (t) => {
     const ctx = setup(t);
-    const p = paragraph(ctx, 'Open ' + shortRef(ID_A) + '.');
+    const p = paragraph(ctx, 'Open ' + fileRef(ID_A) + '.');
     ctx.renderer.render(ctx.document.body);
     const element = references(ctx)[0];
     ctx.renderer.render(ctx.document.body);
@@ -206,71 +204,50 @@ test('does not duplicate existing reference elements when reprocessing', (t) => 
     assert.equal(p.textContent, 'Open report.pdf.');
 });
 
-test('shows missing and ambiguous references without attaching actions', (t) => {
-    const first = makeFileRecord(ID_A);
-    const duplicate = makeFileRecord(ID_A, { path: 'docs/duplicate.pdf' });
-    const ctx = setup(t, [first, duplicate]);
-    paragraph(ctx, shortRef(ID_A) + ' and ' + fullRef(ID_B));
+test('shows missing references without attaching actions', (t) => {
+    const ctx = setup(t, []);
+    paragraph(ctx, fileRef(ID_A) + ' and ' + fileRef(ID_B));
     ctx.renderer.render(ctx.document.body);
     const elements = references(ctx);
     assert.deepEqual(elements.map(el => el.textContent), [
-        'Ambiguous file reference', 'This file is not recorded',
+        'This file is not recorded', 'This file is not recorded',
     ]);
     assert.ok(elements.every(el => el.classList.contains('file-pilot-reference-unresolved')));
     for (const el of elements) mouse(ctx, el, 'dblclick');
     assert.deepEqual(ctx.actions, []);
 });
 
-test('localizes missing and ambiguous references in Chinese', (t) => {
+test('localizes missing references in Chinese', (t) => {
     const previousLanguage = getLanguage();
     setLanguage('zh');
     t.after(() => setLanguage(previousLanguage));
 
-    const first = makeFileRecord(ID_A);
-    const duplicate = makeFileRecord(ID_A, { path: 'docs/duplicate.pdf' });
-    const ctx = setup(t, [first, duplicate]);
-    paragraph(ctx, shortRef(ID_A) + ' and ' + fullRef(ID_B));
-
+    const ctx = setup(t, []);
+    paragraph(ctx, fileRef(ID_A));
     ctx.renderer.render(ctx.document.body);
 
     const elements = references(ctx);
-    assert.deepEqual(elements.map(el => el.textContent), [
-        '文件引用存在歧义',
-        '该文件未被记录',
-    ]);
-    assert.deepEqual(elements.map(el => el.title), [
-        '多个受管理文件具有相同的引用短 Key。',
-        '没有与此引用匹配的受管理文件。',
-    ]);
-    assert.ok(elements.every(el =>
-        el.classList.contains('file-pilot-reference-unresolved')));
-    for (const element of elements) {
-        mouse(ctx, element, 'dblclick');
-    }
+    assert.equal(elements.length, 1);
+    assert.equal(elements[0].textContent, '该文件未被记录');
+    assert.equal(elements[0].title, '没有与此引用匹配的受管理文件。');
+    assert.ok(elements[0].classList.contains('file-pilot-reference-unresolved'));
+    mouse(ctx, elements[0], 'dblclick');
     assert.deepEqual(ctx.actions, []);
 });
 
-test('localizes missing and ambiguous reference tooltips in English', (t) => {
+test('localizes missing reference tooltips in English', (t) => {
     const previousLanguage = getLanguage();
     setLanguage('en');
     t.after(() => setLanguage(previousLanguage));
 
-    const first = makeFileRecord(ID_A);
-    const duplicate = makeFileRecord(ID_A, { path: 'docs/duplicate.pdf' });
-    const ctx = setup(t, [first, duplicate]);
-    paragraph(ctx, shortRef(ID_A) + ' and ' + fullRef(ID_B));
-
+    const ctx = setup(t, []);
+    paragraph(ctx, fileRef(ID_A));
     ctx.renderer.render(ctx.document.body);
 
     const elements = references(ctx);
-    assert.deepEqual(elements.map(el => el.textContent), [
-        'Ambiguous file reference',
-        'This file is not recorded',
-    ]);
-    assert.deepEqual(elements.map(el => el.title), [
-        'Multiple managed files share this reference key.',
-        'No managed file matches this reference.',
-    ]);
+    assert.equal(elements.length, 1);
+    assert.equal(elements[0].textContent, 'This file is not recorded');
+    assert.equal(elements[0].title, 'No managed file matches this reference.');
 });
 
 test('falls back to English for unresolved references in unsupported locales', (t) => {
@@ -279,7 +256,7 @@ test('falls back to English for unresolved references in unsupported locales', (
     t.after(() => setLanguage(previousLanguage));
 
     const ctx = setup(t, []);
-    paragraph(ctx, fullRef(ID_A));
+    paragraph(ctx, fileRef(ID_A));
 
     ctx.renderer.render(ctx.document.body);
 
@@ -289,7 +266,7 @@ test('falls back to English for unresolved references in unsupported locales', (
 
 test('reuses double-click, Ctrl-click and Alt-click without intercepting plain click', async (t) => {
     const ctx = setup(t);
-    paragraph(ctx, shortRef(ID_A));
+    paragraph(ctx, fileRef(ID_A));
     ctx.renderer.render(ctx.document.body);
     const el = references(ctx)[0];
     assert.equal(mouse(ctx, el, 'dblclick').defaultPrevented, true);
@@ -304,7 +281,7 @@ test('reuses double-click, Ctrl-click and Alt-click without intercepting plain c
 
 test('does not open a reference when Enter is pressed', (t) => {
     const ctx = setup(t);
-    paragraph(ctx, shortRef(ID_A));
+    paragraph(ctx, fileRef(ID_A));
     ctx.renderer.render(ctx.document.body);
     references(ctx)[0].dispatchEvent(new ctx.window.KeyboardEvent('keydown', {
         key: 'Enter', bubbles: true, cancelable: true,
@@ -314,7 +291,7 @@ test('does not open a reference when Enter is pressed', (t) => {
 
 test('re-resolves the record when clicked and refuses removed records', async (t) => {
     const ctx = setup(t, [makeFileRecord(ID_A, { path: 'docs/old.pdf' })]);
-    paragraph(ctx, shortRef(ID_A));
+    paragraph(ctx, fileRef(ID_A));
     ctx.renderer.render(ctx.document.body);
     const el = references(ctx)[0];
     ctx.service.rebuildReferenceIndex([makeFileRecord(ID_A, { path: 'docs/new.pdf' })]);
@@ -329,7 +306,7 @@ test('re-resolves the record when clicked and refuses removed records', async (t
 
 test('reports asynchronous file-action failures through the shared notifier', async (t) => {
     const ctx = setup(t);
-    paragraph(ctx, shortRef(ID_A));
+    paragraph(ctx, fileRef(ID_A));
     ctx.renderer.render(ctx.document.body);
     const previous = console.error;
     const errors = [];
@@ -352,7 +329,7 @@ test('renders File Pilot tree references while retaining tree text and summaries
     const ctx = setup(t, [record]);
     const code = ctx.document.createElement('code');
     code.className = 'language-file-pilot-tree';
-    code.textContent = 'Project/\n├── ' + shortRef(ID_A) + ' # Annual report\n└── EmptyFolder/';
+    code.textContent = 'Project/\n├── ' + fileRef(ID_A) + ' # Annual report\n└── EmptyFolder/';
     const pre = ctx.document.createElement('pre');
     pre.append(code);
     ctx.document.body.append(pre);
@@ -372,7 +349,7 @@ test('accepts a tree language class on the pre element', t => {
     const pre = ctx.document.createElement('pre');
     pre.className = 'language-file-pilot-tree';
     const code = ctx.document.createElement('code');
-    code.textContent = '└── ' + fullRef(ID_A);
+    code.textContent = '└── ' + fileRef(ID_A);
     pre.append(code);
     ctx.document.body.append(pre);
 
@@ -384,7 +361,7 @@ test('accepts a tree language class on the pre element', t => {
 
 test('keeps ordinary fenced and inline code raw beside a tree fence', t => {
     const ctx = setup(t);
-    const ref = shortRef(ID_A);
+    const ref = fileRef(ID_A);
 
     const tree = ctx.document.createElement('pre');
     const treeCode = ctx.document.createElement('code');
@@ -414,9 +391,9 @@ test('tree references reuse the existing file actions and link exclusions', asyn
     const ctx = setup(t);
     const code = ctx.document.createElement('code');
     code.className = 'language-file-pilot-tree';
-    code.textContent = '├── ' + shortRef(ID_A);
+    code.textContent = '├── ' + fileRef(ID_A);
     const link = ctx.document.createElement('a');
-    link.textContent = shortRef(ID_A);
+    link.textContent = fileRef(ID_A);
     code.append(link);
     const pre = ctx.document.createElement('pre');
     pre.append(code);
@@ -424,7 +401,7 @@ test('tree references reuse the existing file actions and link exclusions', asyn
 
     ctx.renderer.render(ctx.document.body);
 
-    assert.equal(link.textContent, shortRef(ID_A));
+    assert.equal(link.textContent, fileRef(ID_A));
     const reference = code.querySelector('.file-pilot-reference');
     assert.ok(reference);
     mouse(ctx, reference, 'dblclick');

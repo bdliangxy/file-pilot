@@ -25,7 +25,7 @@ export type ScannedFileInfo =
 export type FileStatus = 'available' | 'missing';
 
 export type FileRecord = ScannedFileInfo & {
-	id: string;	// Stable primary key used for internal plugin references.
+	id: string;	// Stable, unique, case-sensitive 12-character ID.
 	status: FileStatus;
 	shadowNotePath: string; // Path relative to the vault root.
 }

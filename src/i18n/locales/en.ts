@@ -106,8 +106,6 @@ export const en = {
 	// File reference rendering
 	fileReferenceNotFound: 'This file is not recorded',
 	fileReferenceNotFoundHint: 'No managed file matches this reference.',
-	fileReferenceAmbiguous: 'Ambiguous file reference',
-	fileReferenceAmbiguousHint: 'Multiple managed files share this reference key.',
 	fileReferenceCursorMoved: 'The file reference insertion position changed. Please try again',
 	insertFileReferenceCommand: 'File reference',
 	updatePortalNoteTreeCommand: 'Update directory tree',

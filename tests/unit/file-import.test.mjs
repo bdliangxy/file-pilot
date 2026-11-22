@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import crypto from 'node:crypto';
+import { syncBuiltinESMExports } from 'node:module';
+import { createJiti } from 'jiti';
 
 import { createFakeShadowNoteService } from '../fakes/index.mjs';
 import { makeScannedFile, makeScannedFolder } from '../factories/file-record.mjs';
@@ -90,3 +93,42 @@ test('imports folders and files with distinct Shadow Notes', async () => {
     })));
 });
 
+test('retries ID allocation on existing and batch collisions', async (t) => {
+    const existingId = 'Existing0001';
+    const firstId = 'Ab7Xc9Km2LdQ';
+    const secondId = 'Zk3Mr6Tn8PwV';
+    const candidates = [existingId, firstId, firstId, secondId];
+    let calls = 0;
+
+    const randomBytesMock = t.mock.method(crypto, 'randomBytes', (size) => {
+        assert.equal(size, 9);
+        assert.ok(calls < candidates.length);
+        return Buffer.from(candidates[calls++], 'base64url');
+    });
+    syncBuiltinESMExports();
+
+    try {
+        const service = createFakeShadowNoteService();
+        const usedIds = new Set([existingId]);
+        const isolatedJiti = createJiti(import.meta.url, { moduleCache: false });
+        const { importScannedFiles: importWithMock } = await isolatedJiti.import(
+            '../../src/core/file-import.ts',
+        );
+        const records = await importWithMock(
+            [makeScannedFile('a.pdf'), makeScannedFile('b.pdf')],
+            service,
+            usedIds,
+        );
+
+        assert.equal(calls, 4);
+        assert.deepEqual(records.map(record => record.id), [firstId, secondId]);
+        assert.deepEqual(usedIds, new Set([existingId, firstId, secondId]));
+        assert.deepEqual(
+            service.createdNotes.map(note => note.fileId),
+            [firstId, secondId],
+        );
+    } finally {
+        randomBytesMock.mock.restore();
+        syncBuiltinESMExports();
+    }
+});
