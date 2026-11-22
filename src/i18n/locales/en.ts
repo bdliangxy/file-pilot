@@ -121,4 +121,20 @@ export const en = {
 	portalNoteCreated: 'Portal Note created',
 	portalNoteMultipleTreeBlocks:
 		'Multiple file-pilot-tree code blocks were found in the Directory Tree section. Keep only one and try again.',
+
+	// File graph feedback
+	fileGraphUpdated: 'File graph updated',
+	fileGraphUnchanged: 'File graph is already up to date',
+	fileGraphUpdateFailed: 'Failed to update file graph',
+	fileGraphRecordMissing:
+		'File graph node is missing its FileRecord',
+	fileGraphFrontmatterInvalid:
+		'Invalid note properties',
+	fileGraphShadowNoteNotFound:
+		'Shadow Note not found',
+	fileGraphPortalNoteNotFound:
+		`Portal Note not found. Please click ${syncButtonName} first.`,
+	fileGraphPortalNotePathOccupied:
+		'Portal Note path is occupied',
+
 } as const;

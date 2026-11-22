@@ -120,4 +120,19 @@ export const zh = {
 	portalNoteCreated: '总览笔记已创建',
 	portalNoteMultipleTreeBlocks:
 		'Directory Tree 章节中存在多个 file-pilot-tree 代码块，请保留一个后重试。',
+	// File graph feedback
+	fileGraphUpdated: '文件图谱已更新',
+	fileGraphUnchanged: '文件图谱已是最新',
+	fileGraphUpdateFailed: '更新文件图谱失败',
+	fileGraphRecordMissing:
+		'文件图谱节点缺少对应的 FileRecord',
+	fileGraphFrontmatterInvalid:
+		'笔记属性格式无效',
+	fileGraphShadowNoteNotFound:
+		'找不到对应的影子笔记',
+	fileGraphPortalNoteNotFound:
+		`总览笔记不存在，请先点击${syncButtonName}以同步`,
+	fileGraphPortalNotePathOccupied:
+		'总览笔记路径已被其他对象占用',
+
 } satisfies Record<keyof typeof en, string>;

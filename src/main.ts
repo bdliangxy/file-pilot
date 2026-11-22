@@ -31,6 +31,7 @@ import {
 } from './ui/file-reference-suggest';
 import { PortalNoteService } from './core/portal-note-service';
 import { showPortalNoteFeedback } from './utils/portal-note-utils';
+import { FileGraphService } from './core/file-graph-service';
 
 export default class FilePilotPlugin extends Plugin {
 	//the state service owns and persists all plugin data.
@@ -44,6 +45,7 @@ export default class FilePilotPlugin extends Plugin {
 	public shadowNoteWatcher!: ShadowNoteWatcher;
 	public readonly fileReferenceService = new FileReferenceService();
 	public portalNoteService!: PortalNoteService;
+	public fileGraphService!: FileGraphService;
 
 	async onload(): Promise<void> {
 
@@ -90,7 +92,10 @@ export default class FilePilotPlugin extends Plugin {
 			},
 			(record) => this.shadowNoteService.getFileSummary(record),
 		);
-
+		this.fileGraphService = new FileGraphService(
+			this.app,
+			this.stateService,
+		);
 		// Automatically update Portal Tree annotations when a File Summary changes.
 		this.register(
 			this.shadowNoteWatcher.onFileSummaryChanged(
@@ -198,16 +203,25 @@ export default class FilePilotPlugin extends Plugin {
 			id: 'update-portal-note-tree',
 			name: t('updatePortalNoteTreeCommand'),
 			callback: () => {
-				void this.portalNoteService.syncPortalNote().then(
-					(changed) => showPortalNoteFeedback({
-						status: 'success',
-						changed,
-					}),
-					(error: unknown) => showPortalNoteFeedback({
-						status: 'failure',
-						error,
-					}),
-				);
+				void (async () => {
+					try {
+						const tree =
+							this.portalNoteService.buildCurrentPortalTree();
+
+						const changed =
+							await this.portalNoteService.syncPortalNote(tree);
+
+						showPortalNoteFeedback({
+							status: 'success',
+							changed,
+						});
+					} catch (error) {
+						showPortalNoteFeedback({
+							status: 'failure',
+							error,
+						});
+					}
+				})();
 			},
 		});
 

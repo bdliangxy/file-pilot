@@ -41,6 +41,22 @@ flowchart TD
     ShadowUtils -->|"Format tree annotations"| PortalTree
 ```
 
+## File Graph
+
+```mermaid
+flowchart TD
+    Main["FilePilotPlugin"] -->|"Initialize graph service"| Graph["FileGraphService"]
+    View["FilePilotView"] -->|"Build shared tree and update Portal Note"| Portal["PortalNoteService"]
+    View -->|"Synchronize graph links"| Graph
+    View -->|"Show graph feedback"| GraphUtils["FileGraphUtils"]
+
+    Portal -->|"Build PortalTreeNode"| PortalTree["PortalTreeUtils"]
+    Graph -->|"Read settings and clearing state"| State["PluginStateService"]
+    Graph -->|"Collect parent-child relationships"| GraphUtils
+    Graph -->|"Use PortalTreeNode"| PortalTree
+    GraphUtils -->|"Traverse PortalTreeNode"| PortalTree
+```
+
 ## File References
 
 ```mermaid

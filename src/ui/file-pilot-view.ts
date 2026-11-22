@@ -41,6 +41,8 @@ import { notifyFileActionError } from './file-action-error-notifier';
 
 import { showPortalNoteFeedback } from '../utils/portal-note-utils';
 
+import { showFileGraphFeedback } from '../utils/file-graph-utils';
+
 export const VIEW_TYPE = 'file-pilot-view';
 interface FileItemState {
 	record: FileRecord;
@@ -173,66 +175,89 @@ export class FilePilotView extends ItemView {
 					button.setButtonText(t('scanning'));
 
 					try {
-						const result = await this.filePilot.syncFiles();
-						if (result.importedCount > 0) {
-							new Notice(t('scanCompleted', {
-								fileCount: result.importedFileCount,
-								folderCount: result.importedFolderCount,
-							}));
-						} else {
-							new Notice(t('noNewImportedEntries'));
-						}
-						// Update the list after a successful scan.
-						this.refreshFileList();
+						try {
+							const result = await this.filePilot.syncFiles();
 
-					} catch (error) {
-						if (error instanceof FilePilotError) {
-							switch (error.code) {
-								case 'SYNC_IN_PROGRESS':
-									new Notice(t('syncAlreadyInProgress'));
-									return;
-
-								case 'SCAN_ROOT_NOT_CONFIGURED':
-									new Notice(t('scanRootNotConfigured'));
-									return;
-
-								case 'CLEAR_IN_PROGRESS':
-									new Notice(t('clearInProgress'));
-									return;
+							if (result.importedCount > 0) {
+								new Notice(t('scanCompleted', {
+									fileCount: result.importedFileCount,
+									folderCount: result.importedFolderCount,
+								}));
+							} else {
+								new Notice(t('noNewImportedEntries'));
 							}
+
+							this.refreshFileList();
+						} catch (error) {
+							if (error instanceof FilePilotError) {
+								switch (error.code) {
+									case 'SYNC_IN_PROGRESS':
+										new Notice(t('syncAlreadyInProgress'));
+										return;
+
+									case 'SCAN_ROOT_NOT_CONFIGURED':
+										new Notice(t('scanRootNotConfigured'));
+										return;
+
+									case 'CLEAR_IN_PROGRESS':
+										new Notice(t('clearInProgress'));
+										return;
+								}
+							}
+
+							console.error('File Pilot scan failed:', error);
+							new Notice(t('scanFailed'));
+							return;
 						}
-						console.error('File Pilot scan failed:', error);
-						new Notice(t('scanFailed'));
-						return;
+
+						try {
+							const tree =
+								this.filePilot.portalNoteService.buildCurrentPortalTree();
+
+							const created =
+								await this.filePilot.portalNoteService.createPortalNote(tree);
+
+							if (created) {
+								new Notice(t('portalNoteCreated'));
+							} else {
+								const treeChanged =
+									await this.filePilot.portalNoteService.syncPortalNote(tree);
+
+								showPortalNoteFeedback({
+									status: 'success',
+									changed: treeChanged,
+								});
+							}
+
+							// Update the file graph after the Portal Note succeeds.
+							try {
+								const graphResult =
+									await this.filePilot.fileGraphService.syncLocationGraph(tree);
+
+								showFileGraphFeedback({
+									status: 'success',
+									changed: graphResult.updatedNoteCount > 0,
+								});
+							} catch (error) {
+								showFileGraphFeedback({
+									status: 'failure',
+									error,
+								});
+							}
+
+						} catch (error) {
+							showPortalNoteFeedback({
+								status: 'failure',
+								error,
+							});
+						}
 					} finally {
 						this.scanning = false;
 						button.setDisabled(false);
 						button.setButtonText(t('sync'));
 					}
-					// Create the Portal Note if missing, otherwise update its tree.
-					try {
-						const created =
-							await this.filePilot.portalNoteService.createPortalNote();
+				})
 
-						if (created) {
-							new Notice(t('portalNoteCreated'));
-						} else {
-							const changed =
-								await this.filePilot.portalNoteService.syncPortalNote();
-
-							showPortalNoteFeedback({
-								status: 'success',
-								changed,
-							});
-						}
-					} catch (error) {
-						showPortalNoteFeedback({
-							status: 'failure',
-							error,
-						});
-					}
-
-				});
 		});
 
 		this.rootSetting = rootSetting;

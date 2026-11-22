@@ -55,8 +55,15 @@ function setup(summaryReader = async () => null) {
             },
         },
         portalNoteService: {
+            buildCurrentPortalTree: () => ({ children: [] }),
             createPortalNote: async () => false,
             syncPortalNote: async () => true,
+        },
+        fileGraphService: {
+            syncLocationGraph: async () => ({
+                updatedNoteCount: 0,
+                unchangedNoteCount: 0,
+            }),
         },
     };
     const view = new FilePilotView({
@@ -375,7 +382,7 @@ test('folder summary and ignored status update without mutating its record', asy
     await ui.view.onClose();
 });
 
-test('scan feedback is shown before Portal Note feedback', async () => {
+test('scan, Portal Note and graph feedback are shown in order', async () => {
     const ui = setup();
     let result = {
         importedCount: 3,
@@ -392,24 +399,27 @@ test('scan feedback is shown before Portal Note feedback', async () => {
     assert.deepEqual(Notice.messages, [
         'Imported 1 files and 2 folders',
         'Directory tree updated',
+        'File graph is already up to date',
     ]);
 
     result = { importedCount: 1, importedFileCount: 0, importedFolderCount: 1 };
     scanButton.click();
     await flush();
-    assert.deepEqual(Notice.messages.slice(2), [
+    assert.deepEqual(Notice.messages.slice(3), [
         'Imported 0 files and 1 folders',
         'Directory tree updated',
+        'File graph is already up to date',
     ]);
 
     result = { importedCount: 0, importedFileCount: 0, importedFolderCount: 0 };
     scanButton.click();
     await flush();
-    assert.deepEqual(Notice.messages.slice(4), [
+    assert.deepEqual(Notice.messages.slice(6), [
         'No new files or folders imported',
         'Directory tree updated',
+        'File graph is already up to date',
     ]);
-    assert.equal(Notice.messages.length, 6);
+    assert.equal(Notice.messages.length, 9);
     await ui.view.onClose();
 });
 
@@ -434,6 +444,7 @@ test('scan feedback reports when the Portal Note tree is unchanged', async () =>
     assert.deepEqual(Notice.messages, [
         'No new files or folders imported',
         'Directory tree is already up to date',
+        'File graph is already up to date',
     ]);
 
     await ui.view.onClose();
@@ -703,5 +714,53 @@ test('Summary events target the current FileRecord ID after a list rerender', as
     ui.emit({ fileId: ui.record.id, summary: 'Latest after rerender' });
     assert.equal(ui.find('file-pilot-file-secondary').text, 'Latest after rerender');
     assert.equal(ui.reads, reads);
+    await ui.view.onClose();
+});
+
+test('passes the same PortalTreeNode to Portal Note and file graph updates', async () => {
+    const ui = setup();
+    const tree = { name: 'Project', children: [] };
+    const received = [];
+    let builds = 0;
+
+    ui.view.filePilot.syncFiles = async () => ({
+        importedCount: 0,
+        importedFileCount: 0,
+        importedFolderCount: 0,
+    });
+    ui.view.filePilot.portalNoteService.buildCurrentPortalTree = () => {
+        builds++;
+        return tree;
+    };
+    ui.view.filePilot.portalNoteService.createPortalNote = async value => {
+        received.push(['create', value]);
+        return false;
+    };
+    ui.view.filePilot.portalNoteService.syncPortalNote = async value => {
+        received.push(['sync', value]);
+        return true;
+    };
+    ui.view.filePilot.fileGraphService.syncLocationGraph = async value => {
+        received.push(['graph', value]);
+        return { updatedNoteCount: 1, unchangedNoteCount: 0 };
+    };
+
+    await ui.view.onOpen();
+    Notice.messages.length = 0;
+    ui.view.rootSetting.controlEl.children[0].click();
+    await flush();
+
+    assert.equal(builds, 1);
+    assert.deepEqual(received.map(([operation]) => operation), [
+        'create', 'sync', 'graph',
+    ]);
+    for (const [, receivedTree] of received) {
+        assert.strictEqual(receivedTree, tree);
+    }
+    assert.deepEqual(Notice.messages, [
+        'No new files or folders imported',
+        'Directory tree updated',
+        'File graph updated',
+    ]);
     await ui.view.onClose();
 });

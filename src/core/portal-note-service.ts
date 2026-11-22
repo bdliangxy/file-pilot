@@ -8,6 +8,7 @@ import { FileReferenceService } from './file-reference-service';
 import {
 	buildPortalTree,
 	renderPortalTree,
+	type PortalTreeNode,
 } from '../utils/portal-tree-utils';
 
 import {
@@ -52,10 +53,11 @@ export class PortalNoteService {
 		return result;
 	}
 
+
 	/**
-	 * Generate the complete managed Portal Tree code block.
+	 * Build a fresh Portal Tree from the current FileRecords.
 	 */
-	private async buildPortalTreeBlock(): Promise<string> {
+	buildCurrentPortalTree(): PortalTreeNode {
 		const records = this.stateService.getFileRecords();
 		const rootPath = this.stateService.getRootPath();
 		const projectName = this.stateService.getProjectName();
@@ -64,7 +66,17 @@ export class PortalNoteService {
 			? path.win32.basename(rootPath)
 			: projectName || 'Root';
 
-		const tree = buildPortalTree(records, rootName);
+		return buildPortalTree(records, rootName);
+	}
+
+
+	/**
+	 * Render the supplied Portal Tree and its File Summaries.
+	 */
+	private async buildPortalTreeBlock(
+		tree: PortalTreeNode,
+	): Promise<string> {
+		const records = this.stateService.getFileRecords();
 		const summariesById = new Map<string, string | null>();
 
 		await Promise.all(
@@ -92,16 +104,20 @@ export class PortalNoteService {
 	/**
 	 * Create a Portal Note through the shared operation queue.
 	 */
-	createPortalNote(): Promise<boolean> {
+	createPortalNote(
+		tree: PortalTreeNode,
+	): Promise<boolean> {
 		return this.enqueueOperation(
-			() => this.createPortalNoteInternal(),
+			() => this.createPortalNoteInternal(tree),
 		);
 	}
 
 	/**
 	 * Create a Portal Note only when the target file does not exist.
 	 */
-	private async createPortalNoteInternal(): Promise<boolean> {
+	private async createPortalNoteInternal(
+		tree: PortalTreeNode,
+	): Promise<boolean> {
 		const projectName = this.stateService.getProjectName();
 		const notePath = `${projectName || 'PORTAL NOTE'}.md`;
 
@@ -121,8 +137,8 @@ export class PortalNoteService {
 
 		let content = '';
 
-		if (this.stateService.getFileRecords().length > 0) {
-			const treeBlock = await this.buildPortalTreeBlock();
+		if (tree.children.length > 0) {
+			const treeBlock = await this.buildPortalTreeBlock(tree);
 
 			content = updateMarkdownSection(
 				'',
@@ -187,7 +203,8 @@ export class PortalNoteService {
 				result = 'renamed';
 			} else {
 				// Call the internal method to avoid nested queue operations.
-				const created = await this.createPortalNoteInternal();
+				const tree = this.buildCurrentPortalTree();
+				const created = await this.createPortalNoteInternal(tree);
 				result = created ? 'created' : 'unchanged';
 			}
 
@@ -206,7 +223,9 @@ export class PortalNoteService {
 	 * Serialize the entire read-build-write operation to prevent
 	 * overwriting concurrent Summary annotation updates.
 	 */
-	syncPortalNote(): Promise<boolean> {
+	syncPortalNote(
+		tree: PortalTreeNode,
+	): Promise<boolean> {
 		return this.enqueueOperation(async () => {
 			const projectName = this.stateService.getProjectName();
 			const notePath = `${projectName || 'PORTAL NOTE'}.md`;
@@ -228,7 +247,7 @@ export class PortalNoteService {
 				);
 			}
 
-			const treeBlock = await this.buildPortalTreeBlock();
+			const treeBlock = await this.buildPortalTreeBlock(tree);
 
 			let changed = false;
 

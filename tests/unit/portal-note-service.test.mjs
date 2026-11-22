@@ -161,7 +161,7 @@ test('creates a Portal Note named after the project and renders its FileRecords'
         records: [record],
     });
 
-    const result = await service.createPortalNote();
+    const result = await service.createPortalNote(service.buildCurrentPortalTree());
     const content = contents.get('My Project.md');
 
     assert.equal(result, true);
@@ -183,7 +183,7 @@ test('creates an empty default Portal Note without a directory tree when no reco
         records: [],
     });
 
-    const result = await service.createPortalNote();
+    const result = await service.createPortalNote(service.buildCurrentPortalTree());
     const content = contents.get('PORTAL NOTE.md');
 
     assert.equal(result, true);
@@ -226,7 +226,7 @@ test('updates only the managed tree fence and preserves surrounding Markdown con
         files: [{ path: existingFile.path, content: existingContent }],
     });
 
-    const result = await service.syncPortalNote();
+    const result = await service.syncPortalNote(service.buildCurrentPortalTree());
     const updatedContent = contents.get(existingFile.path);
 
     assert.equal(result, true);
@@ -255,12 +255,12 @@ test('repeated synchronization leaves an already current Portal Note unchanged',
         files: [{ path: 'My Project.md', content: '' }],
     });
 
-    const firstResult = await service.syncPortalNote();
+    const firstResult = await service.syncPortalNote(service.buildCurrentPortalTree());
     const firstContent = contents.get('My Project.md');
 
     assert.equal(firstResult, true);
 
-    const secondResult = await service.syncPortalNote();
+    const secondResult = await service.syncPortalNote(service.buildCurrentPortalTree());
 
     assert.equal(secondResult, false);
     assert.equal(contents.get('My Project.md'), firstContent);
@@ -375,7 +375,7 @@ test('reports a path occupied by a folder without creating or updating a note', 
     });
 
     await assert.rejects(
-        service.syncPortalNote(),
+        service.syncPortalNote(service.buildCurrentPortalTree()),
         (error) => {
             assert.ok(error instanceof FilePilotError);
             assert.equal(error.code, 'PORTAL_NOTE_PATH_OCCUPIED');
@@ -397,7 +397,7 @@ test('propagates a missing FileRecord reference before changing the Portal Note'
     });
 
     await assert.rejects(
-        service.syncPortalNote(),
+        service.syncPortalNote(service.buildCurrentPortalTree()),
         (error) => {
             assert.ok(error instanceof FilePilotError);
             assert.equal(error.code, 'FILE_REFERENCE_NOT_FOUND');
@@ -430,7 +430,7 @@ test('creates an annotated Portal Tree using summaries for files and managed fol
         },
     });
 
-    const result = await fixture.service.createPortalNote();
+    const result = await fixture.service.createPortalNote(fixture.service.buildCurrentPortalTree());
     const content = fixture.contents.get('My Project.md');
 
     assert.equal(result, true);
@@ -448,22 +448,22 @@ test('refreshes changed annotations and removes cleared ones on full synchroniza
         getFileSummary: async () => summary,
     });
 
-    assert.equal(await fixture.service.syncPortalNote(), true);
+    assert.equal(await fixture.service.syncPortalNote(fixture.service.buildCurrentPortalTree()), true);
     assert.ok(fixture.contents.get('My Project.md').includes(
         '|||@File00000001|||  # Original summary',
     ));
 
     summary = 'Changed summary';
-    assert.equal(await fixture.service.syncPortalNote(), true);
+    assert.equal(await fixture.service.syncPortalNote(fixture.service.buildCurrentPortalTree()), true);
     assert.ok(fixture.contents.get('My Project.md').includes(
         '|||@File00000001|||  # Changed summary',
     ));
     assert.ok(!fixture.contents.get('My Project.md').includes('Original summary'));
 
-    assert.equal(await fixture.service.syncPortalNote(), false);
+    assert.equal(await fixture.service.syncPortalNote(fixture.service.buildCurrentPortalTree()), false);
 
     summary = null;
-    assert.equal(await fixture.service.syncPortalNote(), true);
+    assert.equal(await fixture.service.syncPortalNote(fixture.service.buildCurrentPortalTree()), true);
     const content = fixture.contents.get('My Project.md');
     assert.ok(content.includes('|||@File00000001|||'));
     assert.ok(!content.includes('  # Changed summary'));
@@ -479,7 +479,7 @@ test('does not create or overwrite the Portal Note when Summary reading fails', 
         getFileSummary: async () => { throw error; },
     });
 
-    await assert.rejects(fixture.service.syncPortalNote(), failure => failure === error);
+    await assert.rejects(fixture.service.syncPortalNote(fixture.service.buildCurrentPortalTree()), failure => failure === error);
     assert.equal(fixture.contents.get('My Project.md'), existingContent);
     assert.equal(fixture.calls.created.length, 0);
     assert.equal(fixture.calls.processed.length, 0);
@@ -501,7 +501,7 @@ test('does not update the Portal Note when any one of multiple Summary reads fai
         },
     });
 
-    await assert.rejects(fixture.service.syncPortalNote(), failure => failure === error);
+    await assert.rejects(fixture.service.syncPortalNote(fixture.service.buildCurrentPortalTree()), failure => failure === error);
     assert.equal(fixture.calls.created.length, 0);
     assert.equal(fixture.calls.processed.length, 0);
 });
@@ -551,7 +551,7 @@ test('does not modify user Markdown outside the tree when summaries change', asy
         getFileSummary: async () => 'Latest summary',
     });
 
-    await fixture.service.syncPortalNote();
+    await fixture.service.syncPortalNote(fixture.service.buildCurrentPortalTree());
     const updated = fixture.contents.get('My Project.md');
 
     assert.ok(updated.includes('|||@File00000001|||  # Latest summary'));
@@ -661,7 +661,7 @@ test('serializes full tree generation and later Summary updates', async () => {
             return 'Folder summary';
         },
     });
-    const full = fixture.service.syncPortalNote();
+    const full = fixture.service.syncPortalNote(fixture.service.buildCurrentPortalTree());
     await started;
     const partial = fixture.service.updateFileSummaryAnnotation('File00000001', 'Latest summary');
     try {
@@ -693,7 +693,7 @@ test('skips a queued Summary update when clearing starts before execution', asyn
     let releaseRead;
     const gate = new Promise(resolve => { releaseRead = resolve; });
     const fixture = summaryFixture({ getFileSummary: async () => gate });
-    const full = fixture.service.syncPortalNote();
+    const full = fixture.service.syncPortalNote(fixture.service.buildCurrentPortalTree());
     const partial = fixture.service.updateFileSummaryAnnotation('File00000001', 'Ignored');
     fixture.stateService.isClearingData = true;
     releaseRead('Full summary');
@@ -707,7 +707,7 @@ test('continues processing Summary updates after a full synchronization fails', 
     const fixture = summaryFixture({
         getFileSummary: async () => { throw new Error('Summary read failed'); },
     });
-    const full = fixture.service.syncPortalNote();
+    const full = fixture.service.syncPortalNote(fixture.service.buildCurrentPortalTree());
     const partial = fixture.service.updateFileSummaryAnnotation('File00000001', 'Recovered');
     await assert.rejects(full, /Summary read failed/);
     assert.equal(await partial, true);
@@ -717,7 +717,7 @@ test('continues processing Summary updates after a full synchronization fails', 
 
 test('serializes Portal Note creation, Summary updates and deletion', async () => {
     const fixture = summaryFixture({ files: [] });
-    const created = fixture.service.createPortalNote();
+    const created = fixture.service.createPortalNote(fixture.service.buildCurrentPortalTree());
     const updated = fixture.service.updateFileSummaryAnnotation('File00000001', 'New');
     const deleted = fixture.service.deletePortalNote();
     assert.deepEqual(await Promise.all([created, updated, deleted]), [true, true, true]);

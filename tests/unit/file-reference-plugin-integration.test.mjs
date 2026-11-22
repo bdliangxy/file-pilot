@@ -508,7 +508,7 @@ test('updates Portal Tree annotations from Shadow Note metadata events', async t
     const notePath = (plugin.stateService.getProjectName() || 'PORTAL NOTE') + '.md';
     contents.set(first.shadowNotePath, '## File Summary\n\nInitial');
     contents.set(second.shadowNotePath, '## File Summary\n\nKeep this');
-    assert.equal(await plugin.portalNoteService.createPortalNote(), true);
+    assert.equal(await plugin.portalNoteService.createPortalNote(plugin.portalNoteService.buildCurrentPortalTree()), true);
     const original = contents.get(notePath);
     assert.ok(original.includes('|||@' + ID_A + '|||  # Initial'));
     assert.ok(original.includes('|||@' + ID_B + '|||  # Keep this'));
