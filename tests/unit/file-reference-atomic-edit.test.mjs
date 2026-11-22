@@ -42,8 +42,13 @@ function editor(text, { live = true, exclusions = [] } = {}) {
 }
 
 function apply(text, changes, options = {}) {
-    const { state } = editor(text, options);
-    return state.update({ changes });
+    const edits = Array.isArray(changes) ? changes : [changes];
+    const defaultEvent = edits.some(edit => edit.insert)
+        ? 'input.type'
+        : 'delete.backward';
+    const { userEvent = defaultEvent, ...editorOptions } = options;
+    const { state } = editor(text, editorOptions);
+    return state.update({ changes, userEvent });
 }
 
 test('extension exposes an atomic-range provider beside its transaction filter', () => {
@@ -134,7 +139,7 @@ test('source mode does not intercept editing inside reference syntax', () => {
     const text = REF_A;
     const { state } = editor(text, { live: false });
     assert.equal(
-        state.update({ changes: { from: 5, to: 7, insert: 'Q' } }).newDoc.toString(),
+        state.update({ changes: { from: 5, to: 7, insert: 'Q' }, userEvent: 'input.type' }).newDoc.toString(),
         text.slice(0, 5) + 'Q' + text.slice(7),
     );
 });
@@ -144,7 +149,7 @@ test('code contexts do not receive atomic edit protection', () => {
     const { state } = editor(text, {
         exclusions: [{ from: 0, to: text.length, name: 'FencedCode' }],
     });
-    const transaction = state.update({ changes: { from: 4, to: 6 } });
+    const transaction = state.update({ changes: { from: 4, to: 6 }, userEvent: 'delete.backward' });
     assert.equal(transaction.newDoc.toString(), text.slice(0, 4) + text.slice(6));
 });
 
@@ -244,9 +249,82 @@ test('normal code fences and Source Mode do not atomically protect tree-looking 
     const { state } = editor(tree, { live: false });
     const sourceResult = state.update({
         changes: { from: treeStart + 4, to: treeStart + 7 },
+        userEvent: 'delete.backward',
     });
     assert.equal(
         sourceResult.newDoc.toString(),
         tree.slice(0, treeStart + 4) + tree.slice(treeStart + 7),
     );
+});
+
+test('programmatic tree rebuild replaces an ID without stripping reference delimiters', () => {
+    const text = ['## Directory Tree', '', '```file-pilot-tree', 'Project/',
+        '\u251c\u2500\u2500 ' + REF_A + '  # Summary', '\u2514\u2500\u2500 Other/', '```'].join('\n');
+    const start = text.indexOf(ID_A);
+    const refStart = text.indexOf(REF_A);
+    const { state } = editor(text, {
+        exclusions: [{ from: refStart, to: refStart + REF_A.length, name: 'FencedCode' }],
+    });
+    const tr = state.update({
+        changes: { from: start, to: start + ID_A.length, insert: ID_B },
+        userEvent: 'set',
+    });
+    assert.equal(tr.newDoc.toString(), text.replace(REF_A, REF_B));
+});
+
+test('programmatic tree updates preserve references in mixed ID and Summary changes', () => {
+    const text = ['```file-pilot-tree', '\u251c\u2500\u2500 ' + REF_A + '  # Old summary',
+        '\u2514\u2500\u2500 ' + REF_B, '```'].join('\n');
+    const start = text.indexOf(ID_A);
+    const summary = text.indexOf('Old summary');
+    const { state } = editor(text);
+    const result = state.update({
+        userEvent: 'set',
+        changes: [
+            { from: start, to: start + ID_A.length, insert: 'Mn4Xs8Jk3LqP' },
+            { from: summary, to: summary + 'Old summary'.length, insert: 'New summary' },
+        ],
+    });
+    assert.equal(result.newDoc.toString(),
+        text.replace(ID_A, 'Mn4Xs8Jk3LqP').replace('Old summary', 'New summary'));
+});
+
+test('programmatic Summary insertion and removal leave the reference intact', () => {
+    const text = ['```file-pilot-tree', '\u2514\u2500\u2500 ' + REF_A, '```'].join('\n');
+    const end = text.indexOf(REF_A) + REF_A.length;
+    const annotation = '  # New summary';
+    const { state } = editor(text);
+    const insert = state.update({
+        changes: { from: end, insert: annotation }, userEvent: 'set',
+    });
+    assert.equal(insert.newDoc.toString(), text.slice(0, end) + annotation + text.slice(end));
+    const remove = insert.state.update({
+        changes: { from: end, to: end + annotation.length }, userEvent: 'set',
+    });
+    assert.equal(remove.newDoc.toString(), text);
+});
+
+test('unannotated programmatic changes and history transactions bypass atomic protection', () => {
+    const text = `before ${REF_A} after`;
+    const start = text.indexOf(ID_A);
+    const changes = { from: start, to: start + ID_A.length, insert: ID_B };
+    for (const userEvent of [undefined, 'undo', 'redo']) {
+        const { state } = editor(text);
+        const spec = userEvent === undefined ? { changes } : { changes, userEvent };
+        const result = state.update(spec);
+        assert.equal(result.newDoc.toString(), text.replace(REF_A, REF_B), String(userEvent));
+    }
+});
+
+test('paste, composition, completion, forward deletion and cut retain atomic protection', () => {
+    const text = `before ${REF_A} after`;
+    const from = text.indexOf(ID_A);
+    for (const userEvent of ['input.paste', 'input.type.compose', 'input.complete']) {
+        const tr = apply(text, { from, to: from + ID_A.length, insert: ID_B }, { userEvent });
+        assert.equal(tr.newDoc.toString(), `before ${ID_B} after`, userEvent);
+    }
+    for (const userEvent of ['delete.forward', 'delete.cut']) {
+        const tr = apply(text, { from, to: from + 1 }, { userEvent });
+        assert.equal(tr.newDoc.toString(), 'before  after', userEvent);
+    }
 });

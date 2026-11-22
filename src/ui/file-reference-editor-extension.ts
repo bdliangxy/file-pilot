@@ -142,9 +142,12 @@ function protectReferenceChanges(
 ): TransactionSpec | readonly TransactionSpec[] {
 	const state = tr.startState;
 
+	// Apply atomic reference protection only to user editing operations.
+	// Programmatic document updates and history operations must remain unchanged.
 	if (
 		!tr.docChanged ||
-		state.field(editorLivePreviewField, false) !== true
+		state.field(editorLivePreviewField, false) !== true ||
+		(!tr.isUserEvent("input") && !tr.isUserEvent("delete"))
 	) {
 		return tr;
 	}
