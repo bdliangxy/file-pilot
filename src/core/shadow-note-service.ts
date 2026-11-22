@@ -76,7 +76,7 @@ export class ShadowNoteService {
 		}
 
 		const content =
-			`---\nfile-id: ${fileId}\n---\n\n## File Summary\n\n`;
+			`---\nfile-id: "${fileId}"\n---\n\n## File Summary\n\n`;
 
 		await this.app.vault.create(
 			shadowNotePath,

@@ -16,7 +16,14 @@ test('imports metadata and links each FileRecord to its own Shadow Note', async 
 		makeScannedFile('docs/report.pdf', { baseName: 'report' }),
 		makeScannedFile('other/report.pdf', { baseName: 'report' }),
 	];
-	const records = await importScannedFiles(files, service);
+	const usedIds = new Set(['Existing0001']);
+	const records = await importScannedFiles(files, service, usedIds);
+	assert.equal(usedIds.size, files.length + 1);
+	assert.ok(usedIds.has('Existing0001'));
+	for (const record of records) {
+		assert.ok(usedIds.has(record.id));
+		assert.notEqual(record.id, 'Existing0001');
+	}
 
 	assert.equal(records.length, files.length);
 	assert.notEqual(records[0].id, records[1].id);
@@ -24,7 +31,7 @@ test('imports metadata and links each FileRecord to its own Shadow Note', async 
 		const source = files[index];
 		assert.match(
 			record.id,
-			/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+			/^[A-Za-z0-9_-]{12}$/,
 		);
 		assert.deepEqual(record, {
 			...source,
@@ -56,7 +63,7 @@ test('imports folders and files with distinct Shadow Notes', async () => {
         makeScannedFile('Projects/report.pdf'),
     ];
 
-    const records = await importScannedFiles(scannedEntries, service);
+    const records = await importScannedFiles(scannedEntries, service, new Set());
     assert.equal(records.length, scannedEntries.length);
     assert.deepEqual(records.map(record => record.kind), [
         'folder', 'folder', 'folder', 'file',

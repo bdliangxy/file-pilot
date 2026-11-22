@@ -10,9 +10,98 @@ import { createFakeDataAdapter } from '../fakes/index.mjs';
 import { createPluginStateServiceTestContext } from '../helpers/plugin-state-service.mjs';
 
 const jiti = createTestJiti(import.meta.url);
-const { PluginStateService } = await jiti.import('../../src/data/plugin-state-service.ts');
+const { PluginStateService, isValidFileId } = await jiti.import('../../src/data/plugin-state-service.ts');
 const { DEFAULT_IGNORE_PATTERNS } = await jiti.import('../../src/data/setting-data.ts');
 const { FilePilotError } = await jiti.import('../../src/error.ts');
+
+test('validates case-sensitive 12-character FileRecord IDs', () => {
+    for (const id of ['Ab7Xc9Km2LdQ', '123456789012', 'aB09_-xY7kLm']) {
+        assert.equal(isValidFileId(id), true);
+    }
+    for (const id of [null, undefined, 123456789012, {}, '', 'short',
+        'Ab7Xc9Km2LdQx', 'Ab7Xc9Km2Ld!', 'Ab7Xc9Km2Ld\n']) {
+        assert.equal(isValidFileId(id), false);
+    }
+});
+
+test('loads distinct IDs that differ only in case', async () => {
+    const records = [
+        makeFileRecord('Ab7Xc9Km2LdQ'),
+        makeFileRecord('ab7Xc9Km2LdQ', { path: 'other.pdf' }),
+    ];
+    const { service, savedData } = createPluginStateServiceTestContext(
+        PluginStateService, makePluginData({ fileRecords: records }),
+    );
+    await service.load();
+    assert.deepEqual(service.getFileRecords(), records);
+    assert.equal(savedData.length, 0);
+});
+
+test('rejects invalid and duplicate IDs without persisting any part of a batch', async () => {
+    const existing = makeFileRecord('File00000001');
+    const { service, savedData } = createPluginStateServiceTestContext(
+        PluginStateService, makePluginData({ fileRecords: [existing] }),
+    );
+    await service.load();
+
+    const valid = makeFileRecord('File00000002', { path: 'a.pdf' });
+
+    await assert.rejects(service.addFileRecords([
+        valid, makeFileRecord('invalid', { path: 'b.pdf' }),
+    ]), /Invalid FileRecord ID/);
+    await assert.rejects(service.addFileRecords([
+        valid, makeFileRecord(existing.id, { path: 'b.pdf' }),
+    ]), /Duplicate FileRecord ID/);
+    await assert.rejects(service.addFileRecords([
+        valid, makeFileRecord(valid.id, { path: 'b.pdf' }),
+    ]), /Duplicate FileRecord ID/);
+
+    assert.deepEqual(service.getFileRecords(), [existing]);
+    assert.equal(savedData.length, 0);
+});
+
+test('accepts case-distinct IDs when adding records', async () => {
+    const first = makeFileRecord('Ab7Xc9Km2LdQ');
+    const second = makeFileRecord('ab7Xc9Km2LdQ', { path: 'other.pdf' });
+    const { service, savedData } = createPluginStateServiceTestContext(
+        PluginStateService, makePluginData({ fileRecords: [first] }),
+    );
+    await service.load();
+    await service.addFileRecords([second]);
+    assert.deepEqual(service.getFileRecords(), [first, second]);
+    assert.deepEqual(savedData[0].pluginData.fileRecords, [first, second]);
+});
+
+test('invalid persisted data initializes defaults and logs the reason', async (t) => {
+    const valid = makeFileRecord();
+    const expected = makePluginData({ ignorePatterns: [...DEFAULT_IGNORE_PATTERNS] });
+    const cases = [
+        ['invalid top-level value', 42, /expected an object/],
+        ['missing settings', { pluginData: {} }, /missing settingData/],
+        ['missing plugin data', { settingData: {} }, /missing pluginData/],
+        ['invalid plugin data', { settingData: {}, pluginData: null }, /pluginData must be an object/],
+        ['missing version', { settingData: {}, pluginData: { fileRecords: [] } }, /missing pluginData.version/],
+        ['wrong version', makePluginData({ version: 2 }), /expected version 1/],
+        ['invalid records array', { settingData: {}, pluginData: { version: 1, fileRecords: {} } }, /fileRecords must be an array/],
+        ['invalid record', makePluginData({ fileRecords: [null] }), /fileRecords\[0\] must be an object/],
+        ['missing ID', makePluginData({ fileRecords: [{}] }), /missing fileRecords\[0\].id/],
+        ['invalid ID', makePluginData({ fileRecords: [makeFileRecord('invalid')] }), /fileRecords\[0\].id must be a 12-character/],
+        ['duplicate ID', makePluginData({ fileRecords: [valid, makeFileRecord(valid.id, { path: 'other.pdf' })] }), /duplicate FileRecord ID.*fileRecords\[1\]/],
+    ];
+
+    const warnings = t.mock.method(console, 'warn', () => {});
+    for (const [name, storedData, pattern] of cases) {
+        warnings.mock.resetCalls();
+        const { service, savedData } = createPluginStateServiceTestContext(
+            PluginStateService, storedData,
+        );
+        await service.load();
+        assert.equal(service.getFileRecordCount(), 0, name);
+        assert.deepEqual(savedData, [expected], name);
+        assert.equal(warnings.mock.callCount(), 1, name);
+        assert.match(warnings.mock.calls[0].arguments[0], pattern, name);
+    }
+});
 
 test('loads existing state without writing it again', async () => {
 	const storedData = makePluginData({ rootPath: 'C:\\existing', fileRecords: [makeFileRecord()] });
@@ -55,8 +144,8 @@ test('isolates state from source objects and returned file scopes', async () => 
 
 test('getFileRecords returns an isolated snapshot without saving', async () => {
 	const originalRecords = [
-		makeFileRecord('file-1', { path: 'docs/report.pdf' }),
-		makeFileRecord('file-2', { path: 'images/photo.png' }),
+		makeFileRecord('File00000001', { path: 'docs/report.pdf' }),
+		makeFileRecord('File00000002', { path: 'images/photo.png' }),
 	];
 	const { service, savedData } = createPluginStateServiceTestContext(
 		PluginStateService,
@@ -68,7 +157,7 @@ test('getFileRecords returns an isolated snapshot without saving', async () => {
 	assert.deepEqual(returnedRecords, originalRecords);
 
 	returnedRecords[0].path = 'changed/by/ui.pdf';
-	returnedRecords.push(makeFileRecord('file-3', { path: 'extra.txt' }));
+	returnedRecords.push(makeFileRecord('File00000003', { path: 'extra.txt' }));
 
 	assert.deepEqual(service.getFileRecords(), originalRecords);
 	assert.equal(service.getFileRecordCount(), 2);
@@ -85,21 +174,21 @@ test('adds records and persists the updated state', async () => {
 
 	assert.equal(service.getFileRecordCount(), 1);
 	assert.deepEqual(savedData[0].pluginData.fileRecords, [record]);
-	assert.equal(savedData[0].pluginData.version, 2);
+	assert.equal(savedData[0].pluginData.version, 1);
 
 	record.path = 'changed after saving';
 	assert.equal(savedData[0].pluginData.fileRecords[0].path, 'docs/report.pdf');
 });
 
 test('rejects an already managed path without changing stored records', async () => {
-	const existingRecord = makeFileRecord('file-1', { path: 'docs/report.pdf' });
+	const existingRecord = makeFileRecord('File00000001', { path: 'docs/report.pdf' });
 	const { service, savedData } = createPluginStateServiceTestContext(
 		PluginStateService,
 		makePluginData({ fileRecords: [existingRecord] }),
 	);
 	await service.load();
 
-	const duplicatePathRecord = makeFileRecord('file-2', {
+	const duplicatePathRecord = makeFileRecord('File00000002', {
 		path: 'docs/report.pdf',
 	});
 

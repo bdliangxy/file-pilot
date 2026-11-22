@@ -59,8 +59,8 @@ test('concurrent record additions use the latest state and never overlap writes'
     t.after(() => ctx.release.resolve());
     await ctx.service.load();
 
-    const firstRecord = makeFileRecord('first', { path: 'docs/first.pdf' });
-    const secondRecord = makeFileRecord('second', { path: 'docs/second.pdf' });
+    const firstRecord = makeFileRecord('First0000001', { path: 'docs/first.pdf' });
+    const secondRecord = makeFileRecord('Second000001', { path: 'docs/second.pdf' });
     const first = ctx.service.addFileRecords([firstRecord]);
     await ctx.started.promise;
 
@@ -82,7 +82,7 @@ test('settings update queued behind record addition retains the new record', asy
     t.after(() => ctx.release.resolve());
     await ctx.service.load();
 
-    const record = makeFileRecord('first', { path: 'docs/first.pdf' });
+    const record = makeFileRecord('First0000001', { path: 'docs/first.pdf' });
     const addition = ctx.service.addFileRecords([record]);
     await ctx.started.promise;
 
@@ -98,8 +98,8 @@ test('settings update queued behind record addition retains the new record', asy
 });
 
 test('settings update queued behind record deletion cannot resurrect a deleted record', async (t) => {
-    const removed = makeFileRecord('remove', { path: 'docs/remove.pdf' });
-    const kept = makeFileRecord('keep', { path: 'docs/keep.pdf' });
+    const removed = makeFileRecord('Remove000001', { path: 'docs/remove.pdf' });
+    const kept = makeFileRecord('Keep00000001', { path: 'docs/keep.pdf' });
     const ctx = blockedFirstSave(makePluginData({ fileRecords: [removed, kept] }));
     t.after(() => ctx.release.resolve());
     await ctx.service.load();
@@ -123,7 +123,7 @@ test('a failed mutation rejects its caller but does not poison the queue', async
     await ctx.service.load();
 
     const failed = ctx.service.addFileRecords([
-        makeFileRecord('failed', { path: 'docs/failed.pdf' }),
+        makeFileRecord('Failed000001', { path: 'docs/failed.pdf' }),
     ]);
     await ctx.started.promise;
     const next = ctx.service.updateSettings({ ignorePatterns: ['*.tmp'] });
@@ -145,7 +145,7 @@ test('clearing blocks new regular writes, drains accepted work, and permits rese
     t.after(() => ctx.release.resolve());
     await ctx.service.load();
 
-    const record = makeFileRecord('accepted', { path: 'docs/accepted.pdf' });
+    const record = makeFileRecord('Accepted0001', { path: 'docs/accepted.pdf' });
     const accepted = ctx.service.addFileRecords([record]);
     await ctx.started.promise;
 
@@ -158,7 +158,7 @@ test('clearing blocks new regular writes, drains accepted work, and permits rese
 
     const isClearError = { code: 'CLEAR_IN_PROGRESS' };
     await assert.rejects(
-        ctx.service.addFileRecords([makeFileRecord('blocked', { path: 'blocked.pdf' })]),
+        ctx.service.addFileRecords([makeFileRecord('Blocked00001', { path: 'blocked.pdf' })]),
         isClearError,
     );
     await assert.rejects(ctx.service.removeFileRecord(record.id), isClearError);

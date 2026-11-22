@@ -70,7 +70,7 @@ export const zh = {
 		'已导入 {fileCount} 个文件、{folderCount} 个文件夹',
 	noNewImportedEntries:
 		'无新文件或文件夹导入',
-	SameNameFile: `文件 {fileName} 的影子笔记存在命名冲突，${pluginName}已在影子笔记后面添加UUID，强烈建议手动修改文件名`,
+	SameNameFile: `文件 {fileName} 的影子笔记存在命名冲突，${pluginName}已在影子笔记后面添加文件ID，强烈建议手动修改文件名`,
 	scanFailed: `扫描失败`,
 	scanning: `扫描文件夹中`,
 	syncAlreadyInProgress: `正在同步中`,

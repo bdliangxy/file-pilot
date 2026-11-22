@@ -167,6 +167,10 @@ export class PluginStateService {
 			);
 
 			for (const record of records) {
+
+				if (!isValidFileId(record.id)) {
+					throw new Error('Invalid FileRecord ID');
+				}
 				if (existingIds.has(record.id)) {
 					throw new Error('Duplicate FileRecord ID');
 				}
@@ -400,16 +404,88 @@ export class PluginStateService {
 	}
 }
 
+export function isValidFileId(id: unknown): id is string {
+	return (
+		typeof id === 'string' &&
+		id.length === 12 &&
+		/^[A-Za-z0-9_-]{12}$/.test(id)
+	);
+}
+
+// Check whether the local data is valid
 function isData(value: unknown): value is Data {
-	if (typeof value !== 'object' || value === null) {
-		return false;
-	}
-	if (!("settingData" in value)) {
+	if (value === null || value === undefined) {
 		return false;
 	}
 
-	if (!("pluginData" in value)) {
+	if (typeof value !== 'object') {
+		console.warn('[File Pilot] Invalid data.json: expected an object.');
 		return false;
+	}
+
+	if (!('settingData' in value)) {
+		console.warn('[File Pilot] Invalid data.json: missing settingData.');
+		return false;
+	}
+
+	if (!('pluginData' in value)) {
+		console.warn('[File Pilot] Invalid data.json: missing pluginData.');
+		return false;
+	}
+
+	const pluginData = value.pluginData;
+
+	if (typeof pluginData !== 'object' || pluginData === null) {
+		console.warn('[File Pilot] Invalid data.json: pluginData must be an object.');
+		return false;
+	}
+
+	if (!('version' in pluginData)) {
+		console.warn('[File Pilot] Invalid data.json: missing pluginData.version.');
+		return false;
+	}
+
+	if (pluginData.version !== DEFAULT_PLUGIN_DATA.version) {
+		console.warn(
+			`[File Pilot] Invalid data.json: expected version ${DEFAULT_PLUGIN_DATA.version}, received:`,
+			pluginData.version,
+		);
+		return false;
+	}
+
+	if (
+		!('fileRecords' in pluginData) ||
+		!Array.isArray(pluginData.fileRecords)
+	) {
+		console.warn('[File Pilot] Invalid data.json: pluginData.fileRecords must be an array.');
+		return false;
+	}
+
+	// Validate FileRecord IDs and reject duplicates.
+	const ids = new Set<string>();
+
+	for (const [index, record] of (pluginData.fileRecords as unknown[]).entries()) {
+		if (typeof record !== 'object' || record === null) {
+			console.warn(`[File Pilot] Invalid data.json: fileRecords[${index}] must be an object.`);
+			return false;
+		}
+
+		if (!('id' in record)) {
+			console.warn(`[File Pilot] Invalid data.json: missing fileRecords[${index}].id.`);
+			return false;
+		}
+
+		if (!isValidFileId(record.id)) {
+			console.warn(`[File Pilot] Invalid data.json: fileRecords[${index}].id must be a 12-character Base64URL string.`);
+			return false;
+		}
+
+		if (ids.has(record.id)) {
+			console.warn(`[File Pilot] Invalid data.json: duplicate FileRecord ID "${record.id}" at fileRecords[${index}].`);
+			return false;
+		}
+
+		ids.add(record.id);
 	}
 
 	return true;

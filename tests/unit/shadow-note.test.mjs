@@ -69,11 +69,11 @@ test('retrieves the Shadow Note associated with a FileRecord', () => {
 
 test('creates the ShadowNotes folder with file-id and File Summary heading', async () => {
 	const { service, createdFolders, createdFiles } = setup();
-	await service.createShadowNote('ShadowNotes/report.pdf.md', 'file-123');
+	await service.createShadowNote('ShadowNotes/report.pdf.md', '123456789012');
 	assert.deepEqual(createdFolders, ['ShadowNotes']);
 	assert.deepEqual(createdFiles, [{
 		path: 'ShadowNotes/report.pdf.md',
-		content: '---\nfile-id: file-123\n---\n\n## File Summary\n\n',
+		content: '---\nfile-id: "123456789012"\n---\n\n## File Summary\n\n',
 	}]);
 });
 

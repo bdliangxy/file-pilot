@@ -3,7 +3,7 @@ import type {
 	ScannedFileInfo,
 } from './file-interface';
 
-import { randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import type { ShadowNoteService } from './shadow-note-service';
 
@@ -11,10 +11,18 @@ import type { ShadowNoteService } from './shadow-note-service';
 export async function importScannedFiles(
 	scannedFiles: ScannedFileInfo[],
 	shadowNoteService: ShadowNoteService,
+	usedIds: Set<string>,
 ): Promise<FileRecord[]> {
 	const fileRecords: FileRecord[] = [];
 	for (const scannedFileInfo of scannedFiles) {
-		const id = randomUUID();
+		let id: string;
+
+		// Allocate a unique ID for the new FileRecord.
+		do {
+			id = randomBytes(9).toString('base64url');
+		} while (usedIds.has(id));
+
+		usedIds.add(id);
 		const shadowNotePath =
 			shadowNoteService
 				.getAvailableShadowNotePath(

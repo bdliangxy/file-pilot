@@ -6,7 +6,7 @@ export function makePluginData({
 	projectName = '',
 	previousProjectName = null,
 	fileRecords = [], 
-	version = 2,
+	version = 1,
 } = {}) {
 	return {
 		settingData: {

@@ -32,7 +32,7 @@ export function makeScannedFolder(path, options = {}) {
     };
 }
 
-export function makeFileRecord(id = 'file-1', options = {}) {
+export function makeFileRecord(id = 'File00000001', options = {}) {
     return {
         ...makeScannedFile(options.path ?? 'docs/report.pdf', options),
         id,

@@ -20,8 +20,8 @@ const jiti = createJiti(import.meta.url, {
 const { default: FilePilotPlugin } = await jiti.import('../../src/main.ts');
 const { generateShortKey } = await jiti.import('../../src/utils/file-reference-utils.ts');
 
-const ID_A = '550e8400-e29b-41d4-a716-446655440000';
-const ID_B = '6fa459ea-ee8a-3ca4-894e-db77e160355e';
+const ID_A = 'Ab7Xc9Km2LdQ';
+const ID_B = 'Zk3Mr6Tn8PwV';
 
 function makeEmitter() {
     const listeners = new Map();

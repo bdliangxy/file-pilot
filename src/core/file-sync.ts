@@ -48,6 +48,10 @@ export class FileSyncService {
 				existingRecords.map(record => record.path)
 			);
 
+			const usedIds = new Set(
+				existingRecords.map(record => record.id)
+			);
+
 			const filesToImport = scannedFiles.filter(file => {
 				if (knownPaths.has(file.path)) {
 					return false;
@@ -60,6 +64,7 @@ export class FileSyncService {
 			const newRecords = await importScannedFiles(
 				filesToImport,
 				this.shadowNoteService,
+				usedIds,
 			);
 
 			if (newRecords.length > 0) {

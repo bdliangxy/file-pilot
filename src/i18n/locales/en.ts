@@ -71,7 +71,7 @@ export const en = {
 		'Imported {fileCount} files and {folderCount} folders',
 	noNewImportedEntries:
 		'No new files or folders imported',
-	SameNameFile: `The Shadow Note for file {fileName} has a naming conflict. ${pluginName} has appended a UUID to the end. It is strongly recommended that you manually rename the file.`,
+	SameNameFile: `The Shadow Note for file {fileName} has a naming conflict. ${pluginName} has appended a file ID to the end. It is strongly recommended that you manually rename the file.`,
 	scanFailed: `Scan failed`,
 	scanning: `scanning folder`,
 	syncAlreadyInProgress: `Sync already in progress`,
