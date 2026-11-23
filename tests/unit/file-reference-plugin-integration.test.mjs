@@ -74,7 +74,9 @@ function makeApp() {
     const app = {
         vault,
         metadataCache: makeEmitter(),
-        workspace: { getLeavesOfType: () => [] },
+        workspace: Object.assign(makeEmitter(), {
+            getLeavesOfType: () => [],
+        }),
         fileManager: {
             async trashFile(file) {
                 if (file === folder) {

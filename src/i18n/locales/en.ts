@@ -136,5 +136,7 @@ export const en = {
 		`Portal Note not found. Please click ${syncButtonName} first.`,
 	fileGraphPortalNotePathOccupied:
 		'Portal Note path is occupied',
+	graphOpenSource: 'Open source file',
+	graphOpenContainingFolder: 'Open containing folder',
 
 } as const;

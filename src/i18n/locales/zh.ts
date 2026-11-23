@@ -134,5 +134,7 @@ export const zh = {
 		`总览笔记不存在，请先点击${syncButtonName}以同步`,
 	fileGraphPortalNotePathOccupied:
 		'总览笔记路径已被其他对象占用',
+	graphOpenSource: '打开源文件',
+	graphOpenContainingFolder: '打开所在文件夹',
 
 } satisfies Record<keyof typeof en, string>;

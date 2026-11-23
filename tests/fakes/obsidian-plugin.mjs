@@ -45,6 +45,10 @@ export class Plugin {
         this.registeredCleanups.push(callback);
     }
 
+    registerEvent(ref) {
+        this.registeredCleanups.push(() => ref.off());
+    }
+
     addChild(child) {
         this.children.push(child);
         child.onload?.();
