@@ -138,5 +138,7 @@ export const en = {
 		'Portal Note path is occupied',
 	graphOpenSource: 'Open source file',
 	graphOpenContainingFolder: 'Open containing folder',
-
+	fileGraphSelfLink: 'A node cannot link to itself',
+	fileGraphNoteNotFound: 'A connected note no longer exists',
+	fileGraphInvalidNoteType: 'file-pilot-links must connect Markdown notes',
 } as const;

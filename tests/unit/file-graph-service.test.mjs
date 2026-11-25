@@ -47,6 +47,9 @@ function createFixture({
     missingPaths = [],
     noteContents = {},
     clearing = false,
+    extraFiles = {},
+    resolvedLinks = {},
+    caches = {},
 } = {}) {
     const contents = new Map();
     const entries = new Map();
@@ -69,6 +72,10 @@ function createFixture({
         );
     }
 
+    for (const [path, content] of Object.entries(extraFiles)) {
+        addFile(path, content);
+    }
+
     const app = {
         vault: {
             getAbstractFileByPath: path => entries.get(path) ?? null,
@@ -76,6 +83,17 @@ function createFixture({
             read: async file => contents.get(file.path),
         },
         metadataCache: {
+            resolvedLinks,
+            getFileCache: file => caches[file.path] ?? null,
+            getFirstLinkpathDest(linkpath) {
+                const direct = entries.get(linkpath) ?? entries.get(`${linkpath}.md`);
+                if (direct) return direct;
+                const matches = [...entries.values()].filter(file =>
+                    file.path.endsWith(`/${linkpath}`) ||
+                    file.path.endsWith(`/${linkpath}.md`),
+                );
+                return matches.length === 1 ? matches[0] : null;
+            },
             fileToLinktext(file, sourcePath, omitMdExtension) {
                 linkCalls.push({ file, sourcePath, omitMdExtension });
                 return file.path.replace(/\.md$/, '');
@@ -251,5 +269,239 @@ test('data clearing prevents graph writes', async () => {
         error => error instanceof FilePilotError
             && error.code === 'CLEAR_IN_PROGRESS',
     );
+    assert.deepEqual(f.writes, []);
+});
+
+test('queries native incoming and outgoing connections with independent link sources', () => {
+    const f = createFixture({
+        extraFiles: {
+            'A.md': '', 'B.md': '', 'C.md': '', 'D.md': '', 'image.png': '',
+        },
+        resolvedLinks: {
+            'A.md': { 'Project.md': 1 },
+            'B.md': { 'Project.md': 1 },
+            'Project.md': {
+                'C.md': 3, 'D.md': 1, 'image.png': 1,
+                'Project.md': 1, 'missing.md': 1,
+            },
+            'missing.md': { 'Project.md': 1 },
+        },
+        caches: {
+            'A.md': {
+                frontmatterLinks: [{
+                    key: 'file-pilot-links.0', link: 'Project',
+                    original: '[[Project | Alias ]]', displayText: 'Alias',
+                }],
+            },
+            'B.md': { links: [{ link: 'Project#Intro' }] },
+            'Project.md': {
+                frontmatterLinks: [
+                    { key: 'file-pilot-links.0', link: 'C' },
+                    { key: 'file-pilot-links.1', link: 'C#Intro' },
+                    { key: 'related.0', link: 'C' },
+                    { key: 'file-pilot-links.custom', link: 'D' },
+                    { key: 'file-pilot-links.0.name', link: 'D' },
+                ],
+                embeds: [{ link: 'image.png' }],
+            },
+        },
+    });
+    const connection = (path, filePilotLink, otherLink) => ({
+        note: f.entries.get(path), filePilotLink, otherLink,
+    });
+
+    assert.deepEqual(f.service.getNodeConnections(f.entries.get('Project.md')), {
+        incoming: [connection('A.md', true, false), connection('B.md', false, true)],
+        outgoing: [
+            connection('C.md', true, true),
+            connection('D.md', false, true),
+            connection('image.png', false, true),
+        ],
+    });
+    assert.deepEqual(f.writes, []);
+});
+
+test('recognizes scalar property keys and falls back to read-only for unknown sources', () => {
+    const f = createFixture({
+        extraFiles: { 'A.md': '', 'B.md': '', 'C.md': '' },
+        resolvedLinks: { 'Project.md': { 'A.md': 1, 'B.md': 1 } },
+        caches: {
+            'Project.md': { frontmatterLinks: [{ key: 'file-pilot-links', link: 'A' }] },
+        },
+    });
+    assert.deepEqual(f.service.getNodeConnections(f.entries.get('Project.md')).outgoing, [
+        { note: f.entries.get('A.md'), filePilotLink: true, otherLink: false },
+        { note: f.entries.get('B.md'), filePilotLink: false, otherLink: true },
+    ]);
+    assert.deepEqual(f.service.getNodeConnections(f.entries.get('C.md')), {
+        incoming: [], outgoing: [],
+    });
+});
+
+test('adds a managed link to an ordinary note without changing its existing body or properties', async () => {
+    const f = createFixture({
+        extraFiles: {
+            'A.md': '---\ntags: [keep]\nrelated: "[[Project]]"\n---\nSee [[Project]].\n',
+        },
+    });
+    const source = f.entries.get('A.md');
+    const target = f.entries.get('Project.md');
+
+    assert.equal(await f.service.setNodeConnection(source, target, true), true);
+    assert.deepEqual(f.properties(source.path), {
+        tags: ['keep'], related: '[[Project]]', 'file-pilot-links': ['[[Project]]'],
+    });
+    assert.ok(f.contents.get(source.path).endsWith('See [[Project]].\n'));
+    assert.equal(await f.service.setNodeConnection(source, target, true), false);
+    assert.deepEqual(f.writes, [source.path]);
+    assert.equal(await f.service.setNodeConnection(source, target, false), true);
+    assert.equal(await f.service.setNodeConnection(source, target, false), false);
+    assert.deepEqual(f.properties(source.path), {
+        tags: ['keep'], related: '[[Project]]', 'file-pilot-links': [],
+    });
+    assert.ok(f.contents.get(source.path).endsWith('See [[Project]].\n'));
+    assert.deepEqual(f.writes, [source.path, source.path]);
+});
+
+test('deduplicates and removes aliases and heading links while preserving unresolved values', async () => {
+    const links = [
+        '[[Project]]', '[[Project | Alias ]]', '[[Project#Intro]]',
+        '[[Missing]]', 'plain text', '[[Other]]',
+    ];
+    const f = createFixture({
+        portalContent: '# Project\n',
+        extraFiles: {
+            'A.md': `---\n${stringifyYaml({ 'file-pilot-links': links })}---\nSee [[Project]].\n`,
+            'Other.md': '',
+        },
+    });
+    const source = f.entries.get('A.md');
+    const target = f.entries.get('Project.md');
+    assert.equal(await f.service.setNodeConnection(source, target, true), false);
+    assert.deepEqual(f.writes, []);
+    assert.equal(await f.service.setNodeConnection(source, target, false), true);
+    assert.deepEqual(f.properties(source.path)['file-pilot-links'], links.slice(3));
+    assert.ok(f.contents.get(source.path).endsWith('See [[Project]].\n'));
+});
+
+test('creates frontmatter on a note without existing properties', async () => {
+    const f = createFixture({ extraFiles: { 'A.md': '# Body\n' } });
+    assert.equal(await f.service.setNodeConnection(
+        f.entries.get('A.md'), f.entries.get('Project.md'), true,
+    ), true);
+    assert.deepEqual(f.properties('A.md')['file-pilot-links'], ['[[Project]]']);
+    assert.ok(f.contents.get('A.md').endsWith('# Body\n'));
+});
+
+test('rejects new self-links but allows removal of an existing self-link', async () => {
+    const f = createFixture({
+        portalContent: '---\nfile-pilot-links: ["[[Project]]"]\n---\n',
+    });
+    const note = f.entries.get('Project.md');
+    await assert.rejects(f.service.setNodeConnection(note, note, true), {
+        code: 'FILE_GRAPH_SELF_LINK',
+    });
+    assert.deepEqual(f.writes, []);
+    assert.equal(await f.service.setNodeConnection(note, note, false), true);
+    assert.deepEqual(f.properties(note.path)['file-pilot-links'], []);
+});
+
+test('requires Markdown sources and new targets but allows deletion of existing attachment links', async () => {
+    const f = createFixture({
+        portalContent: '---\nfile-pilot-links: ["[[image.png]]"]\n---\n',
+        extraFiles: { 'image.png': '' },
+    });
+    const note = f.entries.get('Project.md');
+    const attachment = f.entries.get('image.png');
+    for (const [source, target, connected] of [
+        [note, attachment, true], [attachment, note, true], [attachment, note, false],
+    ]) {
+        await assert.rejects(f.service.setNodeConnection(source, target, connected), {
+            code: 'FILE_GRAPH_INVALID_NOTE_TYPE',
+        });
+    }
+    assert.deepEqual(f.writes, []);
+    assert.equal(await f.service.setNodeConnection(note, attachment, false), true);
+    assert.deepEqual(f.properties(note.path)['file-pilot-links'], []);
+});
+
+test('rejects missing or replaced endpoints before writing', async () => {
+    const f = createFixture({ extraFiles: { 'A.md': '' } });
+    const source = f.entries.get('A.md');
+    const target = f.entries.get('Project.md');
+    f.entries.delete(target.path);
+    await assert.rejects(f.service.setNodeConnection(source, target, true), {
+        code: 'FILE_GRAPH_NOTE_NOT_FOUND',
+    });
+    f.entries.set(target.path, new TFile(target.path));
+    await assert.rejects(f.service.setNodeConnection(source, target, true), {
+        code: 'FILE_GRAPH_NOTE_NOT_FOUND',
+    });
+    assert.deepEqual(f.writes, []);
+});
+
+test('checks endpoint existence again during the frontmatter update', async () => {
+    const f = createFixture({ extraFiles: { 'A.md': '' } });
+    const source = f.entries.get('A.md');
+    const target = f.entries.get('Project.md');
+    const process = f.app.fileManager.processFrontMatter;
+    f.app.fileManager.processFrontMatter = (file, callback) => {
+        f.entries.delete(target.path);
+        return process(file, callback);
+    };
+    await assert.rejects(f.service.setNodeConnection(source, target, true), {
+        code: 'FILE_GRAPH_NOTE_NOT_FOUND',
+    });
+    assert.deepEqual(f.writes, []);
+    assert.equal(f.contents.get(source.path), '');
+});
+
+test('rejects malformed frontmatter and non-string managed property values without writing', async () => {
+    for (const content of [
+        '---\nvalue: [\n---\n',
+        '---\nhello\n---\n',
+        '---\nfile-pilot-links: invalid\n---\n',
+        '---\nfile-pilot-links: [42]\n---\n',
+    ]) {
+        const f = createFixture({ extraFiles: { 'A.md': content } });
+        await assert.rejects(f.service.setNodeConnection(
+            f.entries.get('A.md'), f.entries.get('Project.md'), true,
+        ), { code: 'FILE_GRAPH_FRONTMATTER_INVALID' });
+        assert.deepEqual(f.writes, []);
+        assert.equal(f.contents.get('A.md'), content);
+    }
+});
+
+test('checks clearing state before and during a managed link update', async () => {
+    const f = createFixture({ extraFiles: { 'A.md': '' }, clearing: true });
+    const source = f.entries.get('A.md');
+    const target = f.entries.get('Project.md');
+    await assert.rejects(f.service.setNodeConnection(source, target, true), {
+        code: 'CLEAR_IN_PROGRESS',
+    });
+    f.stateService.isClearingData = false;
+    const process = f.app.fileManager.processFrontMatter;
+    f.app.fileManager.processFrontMatter = (file, callback) => {
+        f.stateService.isClearingData = true;
+        return process(file, callback);
+    };
+    await assert.rejects(f.service.setNodeConnection(source, target, true), {
+        code: 'CLEAR_IN_PROGRESS',
+    });
+    assert.deepEqual(f.writes, []);
+});
+
+test('revalidates the latest managed property inside processFrontMatter', async () => {
+    const f = createFixture({ extraFiles: { 'A.md': '' } });
+    const source = f.entries.get('A.md');
+    const target = f.entries.get('Project.md');
+    const process = f.app.fileManager.processFrontMatter;
+    f.app.fileManager.processFrontMatter = (file, callback) => {
+        f.contents.set(file.path, '---\nfile-pilot-links: invalid\n---\n');
+        return process(file, callback);
+    };
+    await assert.rejects(f.service.setNodeConnection(source, target, true), {
+        code: 'FILE_GRAPH_FRONTMATTER_INVALID',
+    });
     assert.deepEqual(f.writes, []);
 });

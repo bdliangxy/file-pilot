@@ -5,6 +5,7 @@ import YAML from 'yaml';
 export class TFile {
     constructor(path) {
         this.path = path;
+        this.extension = path.split('/').pop().split('.').pop();
     }
 }
 
@@ -21,4 +22,11 @@ export function parseYaml(content) {
 
 export function stringifyYaml(data) {
     return YAML.stringify(data);
+}
+
+export function parseLinktext(linktext) {
+    const index = linktext.indexOf('#');
+    return index === -1
+        ? { path: linktext, subpath: '' }
+        : { path: linktext.slice(0, index), subpath: linktext.slice(index) };
 }

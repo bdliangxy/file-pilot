@@ -136,5 +136,7 @@ export const zh = {
 		'总览笔记路径已被其他对象占用',
 	graphOpenSource: '打开源文件',
 	graphOpenContainingFolder: '打开所在文件夹',
-
+	fileGraphSelfLink: '节点不能引用自身',
+	fileGraphNoteNotFound: '连接涉及的笔记已不存在',
+	fileGraphInvalidNoteType: 'file-pilot-links只能在Markdown 笔记间建立联接',
 } satisfies Record<keyof typeof en, string>;

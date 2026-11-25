@@ -100,6 +100,18 @@ export function showFileGraphFeedback(
 			new Notice(t('clearInProgress'));
 			return;
 
+		case 'FILE_GRAPH_SELF_LINK':
+			new Notice(t('fileGraphSelfLink'));
+			return;
+
+		case 'FILE_GRAPH_NOTE_NOT_FOUND':
+			message = t('fileGraphNoteNotFound');
+			break;
+
+		case 'FILE_GRAPH_INVALID_NOTE_TYPE':
+			new Notice(t('fileGraphInvalidNoteType'));
+			return;
+
 		default:
 			new Notice(t('fileGraphUpdateFailed'));
 			return;
