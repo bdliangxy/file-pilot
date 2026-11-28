@@ -83,6 +83,22 @@ export class FilePilotView extends ItemView {
 
 	private unsubscribeSummaryChanged: (() => void) | null = null;
 
+	private readonly handleSummaryOutsidePointerDown = (
+		event: PointerEvent,
+	): void => {
+		const inputEl = this.contentEl
+			.querySelector<HTMLInputElement>(
+				'.file-pilot-summary-editor:focus',
+			);
+
+		if (
+			inputEl &&
+			!event.composedPath().includes(inputEl)
+		) {
+			inputEl.blur();
+		}
+	};
+
 	constructor(
 		leaf: WorkspaceLeaf,
 		private readonly filePilot: FilePilotPlugin,
@@ -339,11 +355,23 @@ export class FilePilotView extends ItemView {
 				);
 		}
 
+		// Commit Summary editing when clicking outside the editor.
+		contentEl.ownerDocument.addEventListener(
+			'pointerdown',
+			this.handleSummaryOutsidePointerDown,
+			true,
+		);
+
 		// Render the initial file list.
 		this.refreshFileList();
 	}
 
 	async onClose(): Promise<void> {
+		this.contentEl.ownerDocument.removeEventListener(
+			'pointerdown',
+			this.handleSummaryOutsidePointerDown,
+			true,
+		);
 		this.unsubscribeSummaryChanged?.();
 		this.unsubscribeSummaryChanged = null;
 

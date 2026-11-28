@@ -650,6 +650,114 @@ test('inline summary editor saves on blur and skips writes when unchanged', asyn
     await ui.view.onClose();
 });
 
+test('outside pointerdown commits Summary even when the graph consumes the event', async () => {
+    let savedSummary = 'Original';
+    const writes = [];
+    const ui = setup(async () => savedSummary);
+    const pending = deferred();
+    ui.view.filePilot.shadowNoteService.updateFileSummary = async (_record, summary) => {
+        writes.push(summary);
+        await pending.promise;
+        savedSummary = summary;
+    };
+
+    await ui.view.onOpen();
+    await flush();
+    const item = ui.view.mapFileIdItemState.get(ui.record.id);
+    await ui.view.startSummaryEdit(item);
+    const input = item.inputEl;
+    const doc = ui.view.contentEl.ownerDocument;
+    const graph = new FakeElement(null, doc);
+    let graphHandled = false;
+    graph.addEventListener('pointerdown', event => {
+        graphHandled = true;
+        event.preventDefault();
+        event.stopPropagation();
+    });
+
+    input.value = 'Updated in graph view';
+    input.dispatch('input');
+    doc.dispatchPointerDown(graph);
+
+    assert.equal(graphHandled, true);
+    assert.equal(doc.activeElement, null);
+    assert.equal(item.isSaving, true);
+    assert.deepEqual(writes, ['Updated in graph view']);
+
+    // A second blur while the write is pending must not save twice.
+    input.dispatch('blur');
+    doc.dispatchPointerDown(graph);
+    assert.deepEqual(writes, ['Updated in graph view']);
+    pending.resolve();
+    await flush();
+
+    assert.equal(item.isEditing, false);
+    assert.equal(item.secondaryEl.text, 'Updated in graph view');
+    assert.deepEqual(writes, ['Updated in graph view']);
+    await ui.view.onClose();
+});
+
+test('pointerdown inside the focused Summary editor does not commit', async () => {
+    const writes = [];
+    const ui = setup(async () => 'Original');
+    ui.view.filePilot.shadowNoteService.updateFileSummary = async (_record, summary) => {
+        writes.push(summary);
+    };
+
+    await ui.view.onOpen();
+    await flush();
+    const item = ui.view.mapFileIdItemState.get(ui.record.id);
+    await ui.view.startSummaryEdit(item);
+    const input = item.inputEl;
+    const doc = ui.view.contentEl.ownerDocument;
+    input.value = 'Draft';
+    input.dispatch('input');
+    doc.dispatchPointerDown(input);
+    await flush();
+
+    assert.equal(doc.activeElement, input);
+    assert.equal(item.isEditing, true);
+    assert.equal(input.value, 'Draft');
+    assert.deepEqual(writes, []);
+    input.dispatch('keydown', { key: 'Escape', isComposing: false });
+    await ui.view.onClose();
+});
+
+test('outside pointerdown without a focused Summary editor has no effect', async () => {
+    const writes = [];
+    const ui = setup(async () => 'Original');
+    ui.view.filePilot.shadowNoteService.updateFileSummary = async (_record, summary) => {
+        writes.push(summary);
+    };
+    await ui.view.onOpen();
+    await flush();
+    const doc = ui.view.contentEl.ownerDocument;
+    const search = searchInput(ui);
+    search.focus();
+    const graph = new FakeElement(null, doc);
+    doc.dispatchPointerDown(graph);
+    await flush();
+
+    assert.equal(doc.activeElement, search);
+    assert.equal(ui.find('file-pilot-file-secondary').text, 'Original');
+    assert.deepEqual(writes, []);
+    await ui.view.onClose();
+});
+
+test('outside pointerdown listener is removed on close and registered once on reopen', async () => {
+    const ui = setup();
+    const doc = ui.view.contentEl.ownerDocument;
+    assert.equal(doc.listenerCount('pointerdown', true), 0);
+    await ui.view.onOpen();
+    assert.equal(doc.listenerCount('pointerdown', true), 1);
+    await ui.view.onClose();
+    assert.equal(doc.listenerCount('pointerdown', true), 0);
+    await ui.view.onOpen();
+    assert.equal(doc.listenerCount('pointerdown', true), 1);
+    await ui.view.onClose();
+    assert.equal(doc.listenerCount('pointerdown', true), 0);
+});
+
 test('Escape cancels summary changes without saving on subsequent blur', async () => {
     const writes = [];
     const ui = setup(async () => 'Original summary');

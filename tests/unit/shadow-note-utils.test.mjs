@@ -153,6 +153,43 @@ test('stops at the next heading when preceding content is not a paragraph', () =
 	);
 });
 
+test('stops Summary extraction at any top-level Markdown thematic break', () => {
+    for (const marker of ['---', '-----', '***', '___', '- - -', '* * *', '_ _ _']) {
+        const content = '## File Summary\n\n' + marker + '\n\nUnrelated text.\n';
+        assert.equal(extractFirstParagraphFromHeading(content, 'File Summary'), null, marker);
+    }
+});
+
+test('extracts the Summary before a thematic break without reading later text', () => {
+    const content = '## File Summary\n\nSummary text.\n\n---\n\nUnrelated text.\n';
+    assert.equal(extractFirstParagraphFromHeading(content, 'File Summary'), 'Summary text.');
+});
+
+test('does not treat YAML, code, nested thematic breaks, or inline hyphens as a Summary boundary', () => {
+    const content = [
+        '---',
+        'file-id: abc',
+        '---',
+        '',
+        '## File Summary',
+        '',
+        '```md',
+        '---',
+        '```',
+        '',
+        '> ---',
+        '',
+        'Actual --- summary.',
+        '',
+    ].join('\n');
+    assert.equal(extractFirstParagraphFromHeading(content, 'File Summary'), 'Actual --- summary.');
+});
+
+test('a Setext heading ends Summary extraction even when its underline uses hyphens', () => {
+    const content = '## File Summary\n\nOther heading\n---\n\nUnrelated text.\n';
+    assert.equal(extractFirstParagraphFromHeading(content, 'File Summary'), null);
+});
+
 test('updates only the requested Markdown section', () => {
     const original = '---\nfile-id: abc\n---\n\n## File Summary\n\nOld\n\n## Notes\n\nKeep\n';
     const updated = updateMarkdownSection(
@@ -334,6 +371,33 @@ test('updates an existing File Summary with replaceFirstParagraph', () => {
         updated,
         '---\nfile-id: abc\n---\n\n## File Summary\n\nNew\n\nExtra details\n\n## Notes\n\nKeep\n',
     );
+});
+
+test('inserts a Summary before a thematic break while preserving later content', () => {
+    for (const marker of ['---', '***', '___', '- - -']) {
+        const content = '## File Summary\n\n' + marker + '\n\nUnrelated text.\n';
+        const updated = updateMarkdownSection(content, 'File Summary', 'New summary.', replaceFirstParagraph);
+        assert.equal(updated, '## File Summary\n\nNew summary.\n\n' + marker + '\n\nUnrelated text.\n');
+        assert.equal(extractFirstParagraphFromHeading(updated, 'File Summary'), 'New summary.');
+    }
+});
+
+test('clearing an already empty Summary before a thematic break leaves the note unchanged', () => {
+    const content = '## File Summary\n\n---\n\nUnrelated text.\n';
+    assert.equal(updateMarkdownSection(content, 'File Summary', '', replaceFirstParagraph), content);
+});
+
+test('deleting the Summary before a thematic break does not promote the following paragraph', () => {
+    const content = '## File Summary\n\nOld summary.\n\n---\n\nUnrelated text.\n';
+    const updated = updateMarkdownSection(content, 'File Summary', '', replaceFirstParagraph);
+    assert.equal(updated, '## File Summary\n\n---\n\nUnrelated text.\n');
+    assert.equal(extractFirstParagraphFromHeading(updated, 'File Summary'), null);
+});
+
+test('replacing the Summary before a thematic break preserves the remaining note', () => {
+    const content = '## File Summary\r\n\r\nOld summary.\r\n\r\n---\r\n\r\nUnrelated text.\r\n';
+    const updated = updateMarkdownSection(content, 'File Summary', 'New summary.', replaceFirstParagraph);
+    assert.equal(updated, content.replace('Old summary.', 'New summary.'));
 });
 
 test('writes into an empty File Summary before the following heading', () => {

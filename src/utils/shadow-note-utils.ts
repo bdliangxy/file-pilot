@@ -81,8 +81,11 @@ export function extractFirstParagraphFromHeading(
 		if (!node) {
 			continue;
 		}
-		// Stop at the next heading.
-		if (node.type === 'heading') {
+		// Stop at the next heading or thematic break.
+		if (
+			node.type === 'heading' ||
+			node.type === 'thematicBreak'
+		) {
 			break;
 		}
 
@@ -313,11 +316,23 @@ export function replaceFirstParagraph(
 		.trim()
 		.replace(/\r\n|\r|\n/g, eol);
 
-	// Locate the first Markdown paragraph.
-	const paragraph = markdownParser
+	// Locate the first paragraph or thematic break.
+	const firstNode = markdownParser
 		.parse(content)
 		.children
-		.find(node => node.type === 'paragraph');
+		.find(node =>
+			node.type === 'paragraph' ||
+			node.type === 'thematicBreak'
+		);
+
+	// Insert a new summary before the thematic break.
+	if (firstNode?.type === 'thematicBreak') {
+		return replacement
+			? insertMarkdownBlock(content, replacement, 0)
+			: content;
+	}
+
+	const paragraph = firstNode;
 
 	if (paragraph) {
 		const end = paragraph.position?.end.offset;

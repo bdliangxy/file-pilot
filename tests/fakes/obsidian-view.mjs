@@ -5,9 +5,61 @@ export function setIcon(element, icon) {
     element.icon = icon;
 }
 
+// Minimal document-level capture and focus behavior for inline editor tests.
+class FakeDocument {
+    constructor() {
+        this.activeElement = null;
+        this.listeners = new Map();
+    }
+
+    eventKey(type, options = false) {
+        const capture = typeof options === 'boolean' ? options : Boolean(options.capture);
+        return type + ':' + capture;
+    }
+
+    addEventListener(type, callback, options) {
+        const key = this.eventKey(type, options);
+        const listeners = this.listeners.get(key) ?? new Set();
+        listeners.add(callback);
+        this.listeners.set(key, listeners);
+    }
+
+    removeEventListener(type, callback, options) {
+        this.listeners.get(this.eventKey(type, options))?.delete(callback);
+    }
+
+    listenerCount(type, options) {
+        return this.listeners.get(this.eventKey(type, options))?.size ?? 0;
+    }
+
+    dispatchPointerDown(target) {
+        const path = [];
+        for (let node = target; node; node = node.parent) path.push(node);
+        path.push(this);
+        let stopped = false;
+        const event = {
+            target,
+            composedPath: () => [...path],
+            preventDefault() {},
+            stopPropagation() { stopped = true; },
+        };
+        for (const callback of this.listeners.get('pointerdown:true') ?? []) {
+            callback(event);
+        }
+        if (!stopped) target.dispatch('pointerdown', event);
+        if (!stopped) {
+            for (const callback of this.listeners.get('pointerdown:false') ?? []) {
+                callback(event);
+            }
+        }
+        // Deliberately do not simulate native focus changes.
+    }
+}
+
 export class FakeElement {
-    constructor(parent = null) {
+    constructor(parent = null, ownerDocument = parent?.ownerDocument ?? new FakeDocument()) {
         this.parent = parent;
+        this.ownerDocument = ownerDocument;
         this.children = [];
         this.classes = new Set();
         this.text = '';
@@ -37,9 +89,12 @@ export class FakeElement {
     }
 
     querySelector(selector) {
-        if (!selector.startsWith('.')) throw new Error('Unsupported selector: ' + selector);
+        const matchSelector = /^\.([\w-]+)(:focus)?$/.exec(selector);
+        if (!matchSelector) throw new Error('Unsupported selector: ' + selector);
+        const [, className, focus] = matchSelector;
         for (const child of this.children) {
-            if (child.classes.has(selector.slice(1))) return child;
+            if (child.classes.has(className)
+                && (!focus || child.ownerDocument.activeElement === child)) return child;
             const match = child.querySelector(selector);
             if (match) return match;
         }
@@ -114,6 +169,10 @@ export class FakeElement {
     }
 
     dispatch(event, properties = {}) {
+        if (event === 'blur' && this.ownerDocument.activeElement === this) {
+            this.ownerDocument.activeElement = null;
+            this.focused = false;
+        }
         const syntheticEvent = {
             target: this,
             preventDefault() {},
@@ -134,14 +193,32 @@ export class FakeElement {
     empty() {
         for (const child of this.children) child.connected = false;
         this.children = [];
+        const active = this.ownerDocument.activeElement;
+        if (active && !active.isConnected) {
+            active.focused = false;
+            this.ownerDocument.activeElement = null;
+        }
     }
 
-    focus() { this.focused = true; }
+    focus() {
+        const active = this.ownerDocument.activeElement;
+        if (active && active !== this) active.blur();
+        this.ownerDocument.activeElement = this;
+        this.focused = true;
+    }
+
+    blur() {
+        if (this.ownerDocument.activeElement === this) this.dispatch('blur');
+    }
+
     select() { this.selected = true; }
 
     addClass(cls) { this.classes.add(cls); }
     removeClass(cls) { this.classes.delete(cls); }
-    setText(text) { this.text = text; }
+    setText(text) {
+        this.empty();
+        this.text = text;
+    }
 }
 
 // Minimal modal lifecycle and suggestion selection for UI tests.
