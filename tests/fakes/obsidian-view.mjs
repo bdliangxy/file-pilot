@@ -14,6 +14,13 @@ export class FakeElement {
         this.attributes = {};
         this.listeners = new Map();
         this.scrollTop = 0;
+        this.pointerCaptures = new Set();
+        const properties = new Map();
+        this.style = {
+            setProperty: (name, value) => properties.set(name, value),
+            getPropertyValue: name => properties.get(name) ?? '',
+            removeProperty: name => properties.delete(name),
+        };
     }
 
     get isConnected() {
@@ -25,10 +32,43 @@ export class FakeElement {
         return this.createEl('div', options);
     }
 
+    createSpan(options = {}) {
+        return this.createEl('span', options);
+    }
+
+    querySelector(selector) {
+        if (!selector.startsWith('.')) throw new Error('Unsupported selector: ' + selector);
+        for (const child of this.children) {
+            if (child.classes.has(selector.slice(1))) return child;
+            const match = child.querySelector(selector);
+            if (match) return match;
+        }
+        return null;
+    }
+
+    prepend(element) {
+        this.appendChild(element);
+        this.children.pop();
+        this.children.unshift(element);
+    }
+
+    remove() {
+        if (this.parent) {
+            const index = this.parent.children.indexOf(this);
+            if (index >= 0) this.parent.children.splice(index, 1);
+        }
+        this.parent = null;
+        this.connected = false;
+    }
+
+    setPointerCapture(id) { this.pointerCaptures.add(id); }
+    hasPointerCapture(id) { return this.pointerCaptures.has(id); }
+    releasePointerCapture(id) { this.pointerCaptures.delete(id); }
+
     createEl(tag, options = {}) {
         const element = new FakeElement(this);
         element.tag = tag;
-        for (const cls of (options.cls ?? '').split(/\s+/).filter(Boolean)) {
+        for (const cls of (Array.isArray(options.cls) ? options.cls : (options.cls ?? '').split(/\s+/).filter(Boolean))) {
             element.classes.add(cls);
         }
         element.text = options.text ?? '';
@@ -58,10 +98,15 @@ export class FakeElement {
         parent.children.splice(parent.children.indexOf(this), 0, element);
     }
 
-    addEventListener(event, callback) {
+    addEventListener(event, callback, options = {}) {
+        if (options.signal?.aborted) return;
         const listeners = this.listeners.get(event) ?? [];
         listeners.push(callback);
         this.listeners.set(event, listeners);
+        options.signal?.addEventListener('abort', () => {
+            const index = listeners.indexOf(callback);
+            if (index >= 0) listeners.splice(index, 1);
+        }, { once: true });
     }
 
     setAttribute(name, value) {
@@ -103,12 +148,16 @@ export class FakeElement {
 export class Modal {
     constructor(app) {
         this.app = app;
-        this.contentEl = new FakeElement();
+        this.modalEl = new FakeElement();
+        this.modalEl.connected = false;
+        this.titleEl = this.modalEl.createDiv({ cls: 'modal-title' });
+        this.contentEl = this.modalEl.createDiv({ cls: 'modal-content' });
         this.isOpen = false;
     }
 
     setTitle(title) {
         this.title = title;
+        this.titleEl.setText(title);
         return this;
     }
 
@@ -117,6 +166,7 @@ export class Modal {
         this.isOpen = true;
         this.app.openModals ??= new Set();
         this.app.openModals.add(this);
+        this.modalEl.connected = true;
         this.onOpen();
     }
 
@@ -124,6 +174,7 @@ export class Modal {
         if (!this.isOpen) return;
         this.isOpen = false;
         this.app.openModals.delete(this);
+        this.modalEl.connected = false;
         this.onClose();
     }
 

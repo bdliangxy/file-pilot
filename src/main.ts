@@ -175,6 +175,8 @@ export default class FilePilotPlugin extends Plugin {
 		this.register(registerGraphRelationMenu(
 			this.app,
 			this.fileGraphService,
+			this.shadowNoteService,
+			this.stateService,
 		));
 
 		// Register the file reference insertion command.

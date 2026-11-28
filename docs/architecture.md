@@ -49,14 +49,16 @@ flowchart TD
     Main -->|"Register relation editor"| Modal["FileGraphRelationModal"]
 
     Modal -->|"Query and edit connections"| Graph
-    Modal -->|"Show graph feedback"| GraphUtils["FileGraphUtils"]
+    Modal -->|"Read File Summary"| Shadow["ShadowNoteService"]
+    Modal -->|"Identify managed folders"| State["PluginStateService"]
+    Modal -->|"Show graph feedback and enable dragging"| GraphUtils["FileGraphUtils"]
 
     View["FilePilotView"] -->|"Build shared tree and update Portal Note"| Portal["PortalNoteService"]
     View -->|"Synchronize graph links"| Graph
     View -->|"Show graph feedback"| GraphUtils
 
     Portal -->|"Build PortalTreeNode"| PortalTree["PortalTreeUtils"]
-    Graph -->|"Read settings and clearing state"| State["PluginStateService"]
+    Graph -->|"Read settings and clearing state"| State
     Graph -->|"Collect parent-child relationships"| GraphUtils
     Graph -->|"Use PortalTreeNode"| PortalTree
     GraphUtils -->|"Traverse PortalTreeNode"| PortalTree

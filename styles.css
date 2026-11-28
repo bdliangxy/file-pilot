@@ -732,3 +732,166 @@ body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explor
 			var(--interactive-accent) 16%,
 			var(--background-modifier-hover)) !important;
 }
+
+/* Match the secondary text layout in the management panel. */
+.modal-content .setting-item.file-pilot-graph-connection .setting-item-description {
+	min-width: 0;
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Allow the graph relation modal to be repositioned. */
+.file-pilot-graph-modal {
+	translate:
+		var(--file-pilot-modal-x, 0px) var(--file-pilot-modal-y, 0px);
+}
+
+/* Use the modal title as the drag handle. */
+.file-pilot-graph-modal-title {
+	cursor: move;
+	user-select: none;
+	touch-action: none;
+}
+
+/* Drag handle for the graph note selector. */
+.file-pilot-graph-suggest-drag-handle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	height: 20px;
+}
+
+/* Shared visual indicator for modal dragging. */
+.file-pilot-graph-suggest-drag-handle::after,
+.file-pilot-graph-relation-modal .file-pilot-graph-modal-title::before {
+	content: '';
+	width: 36px;
+	height: 4px;
+	border-radius: var(--radius-s);
+	background-color: var(--text-faint);
+}
+
+/* Keep the modal header outside the scrollable area. */
+.modal.file-pilot-graph-relation-modal {
+	padding-top: 0 !important;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+/* Graph relation modal title. */
+.file-pilot-graph-relation-modal .file-pilot-graph-modal-title {
+	position: relative;
+	padding-top: 24px;
+	font-size: calc(var(--font-ui-medium) + 6px);
+	font-weight: 700;
+	flex-shrink: 0;
+}
+
+/* Position the drag indicator above the modal title. */
+.file-pilot-graph-relation-modal .file-pilot-graph-modal-title::before {
+	position: absolute;
+	top: 8px;
+	left: 50%;
+	transform: translateX(-50%);
+}
+
+/* Current graph node overview. */
+.file-pilot-graph-relation-modal .setting-item.file-pilot-graph-current-node {
+	padding: 12px !important;
+	margin-bottom: 16px;
+	background-color: var(--background-secondary);
+	border: 0;
+	border-radius: var(--radius-m);
+	flex-shrink: 0;
+}
+
+.file-pilot-graph-current-node .setting-item-name {
+	font-weight: 600;
+	color: var(--text-muted);
+}
+
+/* Separate graph connection sections. */
+.file-pilot-graph-section {
+	margin-top: 16px;
+	padding-top: 12px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Direction-specific section colors. */
+.file-pilot-graph-section-incoming {
+	--file-pilot-graph-section-color: var(--color-blue, #5590c9);
+}
+
+.file-pilot-graph-section-outgoing {
+	--file-pilot-graph-section-color: var(--color-green, #479b78);
+}
+
+/* Graph connection section heading. */
+.file-pilot-graph-relation-modal .setting-item.file-pilot-graph-section-heading {
+	padding: 10px 12px !important;
+	margin: 0 0 4px;
+	border: 0;
+	border-radius: var(--radius-m);
+	background-color: color-mix(in srgb,
+			var(--file-pilot-graph-section-color) 12%,
+			transparent);
+}
+
+/* Emphasize graph connection section titles. */
+.file-pilot-graph-relation-modal .file-pilot-graph-section-heading .setting-item-name {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: calc(var(--font-ui-medium) + 2px);
+	font-weight: 700;
+	color: var(--file-pilot-graph-section-color);
+}
+
+/* Directional icons in graph section headings. */
+.file-pilot-graph-section-icon {
+	display: inline-flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+.file-pilot-graph-section-icon svg {
+	width: 20px;
+	height: 20px;
+	stroke-width: 2;
+}
+
+/* Compact empty state for graph connection sections. */
+.file-pilot-graph-empty-state {
+	margin: 0;
+	padding: 4px 12px;
+	font-size: var(--font-ui-smaller);
+	font-weight: 400;
+	color: var(--text-muted);
+}
+
+/* Remove extra spacing above the incoming section. */
+.file-pilot-graph-section-incoming {
+	margin-top: 0;
+	padding-top: 0;
+}
+
+/* Separate fixed content from scrollable connections. */
+.file-pilot-graph-relation-modal .modal-content {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* Scroll only the graph connection sections. */
+.file-pilot-graph-connections {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+}

@@ -3,6 +3,7 @@ import {
 	FuzzySuggestModal,
 	Setting,
 	setTooltip,
+	setIcon,
 	type App,
 	type TFile,
 	type EventRef,
@@ -12,9 +13,14 @@ import type {
 	FileGraphService,
 	GraphConnection,
 } from '../core/file-graph-service';
-
-import { showFileGraphFeedback } from '../utils/file-graph-utils';
+import type { PluginStateService } from '../data/plugin-state-service';
+import {
+	showFileGraphFeedback,
+	enableModalDragging,
+} from '../utils/file-graph-utils';
 import { t } from '../i18n';
+import type { ShadowNoteService } from '../core/shadow-note-service';
+
 
 type ConnectionDirection = 'incoming' | 'outgoing';
 const GRAPH_LINK_TOOLTIP_DELAY = 300;
@@ -37,10 +43,13 @@ export class FileGraphRelationModal extends Modal {
 	private modalOpen = false;// Determines whether the current modal is still open
 	private isUpdating = false;// Determines whether a connection modification operation is currently in progress
 	private noteSuggestModal: GraphNoteSuggestModal | null = null;
+	private dragController: AbortController | null = null;
 	constructor(
 		app: App,
 		private readonly note: TFile,
 		private readonly fileGraphService: FileGraphService,
+		private readonly shadowNoteService: ShadowNoteService,
+		private readonly stateService: PluginStateService,
 		private readonly onClosed: () => void,
 	) {
 		super(app);
@@ -49,7 +58,12 @@ export class FileGraphRelationModal extends Modal {
 	onOpen(): void {
 		this.modalOpen = true;
 		this.setTitle(t('graphEditRelations'));
+		this.modalEl.addClass('file-pilot-graph-relation-modal');
 
+		this.dragController = enableModalDragging(
+			this.modalEl,
+			this.titleEl,
+		);
 		// Refresh after Obsidian finishes resolving note links.
 		this.metadataEvent = this.app.metadataCache.on(
 			'resolved',
@@ -63,6 +77,8 @@ export class FileGraphRelationModal extends Modal {
 
 	onClose(): void {
 		this.modalOpen = false;
+		this.dragController?.abort();
+		this.dragController = null;
 
 		this.noteSuggestModal?.close();
 		this.noteSuggestModal = null;
@@ -85,6 +101,12 @@ export class FileGraphRelationModal extends Modal {
 		}
 
 		const { contentEl } = this;
+
+		// Preserve the scroll position before rebuilding the connections.
+		const scrollTop = contentEl.querySelector<HTMLElement>(
+			'.file-pilot-graph-connections',
+		)?.scrollTop ?? 0;
+
 		contentEl.empty();
 
 		// Ensure the current note still exists.
@@ -99,37 +121,65 @@ export class FileGraphRelationModal extends Modal {
 		}
 
 		new Setting(contentEl)
+			.setClass('file-pilot-graph-current-node')
 			.setName(t('graphCurrentNode'))
 			.setDesc(getGraphDisplayText(this.note, true));
 
 		const connections =
 			this.fileGraphService.getNodeConnections(this.note);
 
+		// Collect Shadow Note paths representing managed folders.
+		const folderPaths = new Set(
+			this.stateService.getFileRecords()
+				.filter(record => record.kind === 'folder')
+				.map(record => record.shadowNotePath),
+		);
+
+		// Create a dedicated scrollable area for graph connections.
+		const connectionsEl = contentEl.createDiv({
+			cls: 'file-pilot-graph-connections',
+		});
+
 		this.renderConnectionSection(
+			connectionsEl,
 			'incoming',
 			connections.incoming,
+			folderPaths,
 		);
 
 		this.renderConnectionSection(
+			connectionsEl,
 			'outgoing',
 			connections.outgoing,
+			folderPaths,
 		);
+
+		// Restore the scroll position after rendering both sections.
+		connectionsEl.scrollTop = scrollTop;
 	}
 
 	/**
 	 * Render connections in the specified direction.
 	 */
 	private renderConnectionSection(
+		container: HTMLElement,
 		direction: ConnectionDirection,
 		connections: GraphConnection[],
+		folderPaths: ReadonlySet<string>,
 	): void {
-		const section = this.contentEl.createDiv();
+		const section = container.createDiv({
+			cls: [
+				'file-pilot-graph-section',
+				`file-pilot-graph-section-${direction}`,
+			],
+		});
 
 		const title = direction === 'incoming'
 			? t('graphIncomingLinks')
 			: t('graphOutgoingLinks');
 
-		new Setting(section)
+		const heading = new Setting(section)
+			.setClass('file-pilot-graph-section-heading')
 			.setName(`${title} (${connections.length})`)
 			.setHeading()
 			.addButton(button => {
@@ -141,9 +191,23 @@ export class FileGraphRelationModal extends Modal {
 					});
 			});
 
+		// Add a directional icon to the section heading.
+		const iconEl = heading.nameEl.createSpan({
+			cls: 'file-pilot-graph-section-icon',
+		});
+
+		setIcon(
+			iconEl,
+			direction === 'incoming'
+				? 'arrow-down-left'
+				: 'arrow-up-right',
+		);
+
+		heading.nameEl.prepend(iconEl);
+
 		if (connections.length === 0) {
-			section.createEl('p', {
-				cls: 'setting-item-description',
+			section.createDiv({
+				cls: 'file-pilot-graph-empty-state',
 				text: t('graphNoConnections'),
 			});
 			return;
@@ -154,6 +218,7 @@ export class FileGraphRelationModal extends Modal {
 				section,
 				direction,
 				connection,
+				folderPaths,
 			);
 		}
 	}
@@ -165,6 +230,7 @@ export class FileGraphRelationModal extends Modal {
 		container: HTMLElement,
 		direction: ConnectionDirection,
 		connection: GraphConnection,
+		folderPaths: ReadonlySet<string>,
 	): void {
 		const { note, filePilotLink } = connection;
 
@@ -182,7 +248,13 @@ export class FileGraphRelationModal extends Modal {
 
 		// Reuse file list typography.
 		setting.nameEl.addClass('file-pilot-file-name');
+
+		if (folderPaths.has(note.path)) {
+			setting.nameEl.addClass('file-pilot-folder-name');
+		}
+
 		setting.descEl.addClass('file-pilot-file-path');
+		void this.updateConnectionSummary(setting, note);
 
 		// Read-only connections cannot be removed here.
 		if (!filePilotLink) {
@@ -210,6 +282,47 @@ export class FileGraphRelationModal extends Modal {
 					);
 				});
 		});
+	}
+
+	/**
+	 * Display the File Summary when available.
+	 * Keep the path as the fallback.
+	 */
+	private async updateConnectionSummary(
+		setting: Setting,
+		note: TFile,
+	): Promise<void> {
+		if (
+			!note.path.startsWith('ShadowNotes/') ||
+			note.extension !== 'md'
+		) {
+			return;
+		}
+
+		try {
+			const summary =
+				await this.shadowNoteService
+					.getFileSummaryFromNote(note);
+
+			if (
+				!this.modalOpen ||
+				!setting.settingEl.isConnected
+			) {
+				return;
+			}
+
+			if (summary) {
+				setting.descEl.removeClass('file-pilot-file-path');
+				setting.descEl.addClass('file-pilot-file-summary');
+				setting.setDesc(summary);
+			}
+		} catch (error) {
+			console.error(
+				'File Pilot failed to read connection summary:',
+				note.path,
+				error,
+			);
+		}
 	}
 
 	/**
@@ -314,6 +427,7 @@ export class FileGraphRelationModal extends Modal {
  * Select a Markdown note using Obsidian's native fuzzy search.
  */
 class GraphNoteSuggestModal extends FuzzySuggestModal<TFile> {
+	private dragController: AbortController | null = null;
 	constructor(
 		app: App,
 		private readonly getCandidates: () => TFile[],
@@ -322,6 +436,27 @@ class GraphNoteSuggestModal extends FuzzySuggestModal<TFile> {
 	) {
 		super(app);
 		this.setPlaceholder(t('graphSelectNote'));
+	}
+
+	onOpen(): void {
+		void super.onOpen();
+
+		const handleEl = this.modalEl.createDiv({
+			cls: 'file-pilot-graph-suggest-drag-handle',
+		});
+
+		this.modalEl.prepend(handleEl);
+
+		this.dragController = enableModalDragging(
+			this.modalEl,
+			handleEl,
+		);
+
+		this.dragController.signal.addEventListener(
+			'abort',
+			() => handleEl.remove(),
+			{ once: true },
+		);
 	}
 
 	getItems(): TFile[] {
@@ -337,6 +472,9 @@ class GraphNoteSuggestModal extends FuzzySuggestModal<TFile> {
 	}
 
 	onClose(): void {
+		this.dragController?.abort();
+		this.dragController = null;
+
 		super.onClose();
 		this.onClosed();
 	}

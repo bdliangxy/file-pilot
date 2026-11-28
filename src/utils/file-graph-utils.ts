@@ -42,6 +42,89 @@ export function collectPortalTreeRelations(
 	return relations;
 }
 
+/**
+ * Enable dragging for a modal using the specified handle.
+ */
+export function enableModalDragging(
+	modalEl: HTMLElement,
+	handleEl: HTMLElement,
+): AbortController {
+	const controller = new AbortController();
+	const { signal } = controller;
+
+	modalEl.addClass('file-pilot-graph-modal');
+	handleEl.addClass('file-pilot-graph-modal-title');
+
+	let pointerId: number | null = null;
+	let startX = 0;
+	let startY = 0;
+	let offsetX = 0;
+	let offsetY = 0;
+
+	handleEl.addEventListener('pointerdown', event => {
+		if (event.button !== 0 || pointerId !== null) {
+			return;
+		}
+
+		event.preventDefault();
+
+		pointerId = event.pointerId;
+		startX = event.clientX - offsetX;
+		startY = event.clientY - offsetY;
+
+		handleEl.setPointerCapture(event.pointerId);
+	}, { signal });
+
+	handleEl.addEventListener('pointermove', event => {
+		if (event.pointerId !== pointerId) {
+			return;
+		}
+
+		offsetX = event.clientX - startX;
+		offsetY = event.clientY - startY;
+
+		modalEl.style.setProperty(
+			'--file-pilot-modal-x',
+			`${offsetX}px`,
+		);
+
+		modalEl.style.setProperty(
+			'--file-pilot-modal-y',
+			`${offsetY}px`,
+		);
+	}, { signal });
+
+	const stopDragging = (event: PointerEvent): void => {
+		if (event.pointerId === pointerId) {
+			pointerId = null;
+		}
+	};
+
+	handleEl.addEventListener('pointerup', stopDragging, { signal });
+	handleEl.addEventListener('pointercancel', stopDragging, { signal });
+	handleEl.addEventListener('lostpointercapture', stopDragging, { signal });
+
+	// Clean up dragging state when the controller is aborted.
+	signal.addEventListener('abort', () => {
+		if (
+			pointerId !== null &&
+			handleEl.hasPointerCapture(pointerId)
+		) {
+			handleEl.releasePointerCapture(pointerId);
+		}
+
+		pointerId = null;
+
+		modalEl.style.removeProperty('--file-pilot-modal-x');
+		modalEl.style.removeProperty('--file-pilot-modal-y');
+
+		modalEl.removeClass('file-pilot-graph-modal');
+		handleEl.removeClass('file-pilot-graph-modal-title');
+	}, { once: true });
+
+	return controller;
+}
+
 type FileGraphFeedback =
 	| {
 		status: 'success';

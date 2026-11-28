@@ -91,7 +91,17 @@ function setup(t) {
             getMarkdownFiles: () => [...files.values()].filter(file => file.extension === 'md'),
         },
     };
-    const cleanup = registerGraphRelationMenu(app, service);
+    const summaryCalls = [];
+    const summaries = new Map();
+    const records = [];
+    const shadowNoteService = {
+        async getFileSummaryFromNote(note) {
+            summaryCalls.push(note);
+            return summaries.get(note.path) ?? null;
+        },
+    };
+    const stateService = { getFileRecords: () => structuredClone(records) };
+    const cleanup = registerGraphRelationMenu(app, service, shadowNoteService, stateService);
     t.after(() => {
         cleanup();
         Notice.messages.length = 0;
@@ -110,6 +120,7 @@ function setup(t) {
     return {
         app, service, connections, calls, files, cleanup, menuFor, open,
         current, managed, ordinary, mixed, portal, attachment,
+        shadowNoteService, stateService, summaries, summaryCalls, records,
     };
 }
 
@@ -280,7 +291,7 @@ test('resolved events refresh relations and a deleted current note displays an e
     f.connections.incoming.length = 0;
     f.app.metadataCache.emit('resolved');
     assert.equal(findAll(modal.contentEl, 'setting-item-heading').map(name)[0], en.graphIncomingLinks + ' (0)');
-    assert.ok(findAll(modal.contentEl, 'setting-item-description').some(el => el.text === en.graphNoConnections));
+    assert.ok(findAll(modal.contentEl, 'file-pilot-graph-empty-state').some(el => el.text === en.graphNoConnections));
     f.files.delete(f.current.path);
     f.app.metadataCache.emit('resolved');
     assert.equal(modal.contentEl.children[0].text, en.fileGraphNoteNotFound);
@@ -325,10 +336,171 @@ test('menu cleanup closes all remaining parent and child modals and unregisters 
 test('normal close invokes the ownership callback exactly once', t => {
     const f = setup(t);
     let closed = 0;
-    const modal = new FileGraphRelationModal(f.app, f.current, f.service, () => { closed++; });
+    const modal = new FileGraphRelationModal(f.app, f.current, f.service, f.shadowNoteService, f.stateService, () => { closed++; });
     modal.open();
     modal.close();
     modal.close();
     assert.equal(closed, 1);
     assert.equal(f.app.metadataCache.count('resolved'), 0);
+});
+
+test('summary replaces the path only for Shadow Notes with a nonempty summary', async t => {
+    const f = setup(t);
+    f.summaries.set(f.managed.path, 'Project report');
+    const modal = f.open();
+    await settle();
+    const row = rowFor(modal, 'Report.pdf');
+    assert.equal(findAll(row, 'file-pilot-file-summary')[0].text, 'Project report');
+    assert.equal(findAll(row, 'file-pilot-file-path').length, 0);
+    assert.deepEqual(f.summaryCalls, [f.managed]);
+    assert.equal(findAll(rowFor(modal, 'Ordinary.md'), 'file-pilot-file-path')[0].text, f.ordinary.path);
+    f.summaries.delete(f.managed.path);
+    f.app.metadataCache.emit('resolved');
+    await settle();
+    assert.equal(findAll(rowFor(modal, 'Report.pdf'), 'file-pilot-file-path')[0].text, 'ShadowNotes/Report.pdf');
+});
+
+test('summary read failure keeps the path and logs the error', async t => {
+    const f = setup(t);
+    const error = new Error('read failed');
+    const log = t.mock.method(console, 'error', () => {});
+    f.shadowNoteService.getFileSummaryFromNote = async () => { throw error; };
+    const modal = f.open();
+    await settle();
+    assert.equal(findAll(rowFor(modal, 'Report.pdf'), 'file-pilot-file-path')[0].text, 'ShadowNotes/Report.pdf');
+    assert.equal(log.mock.callCount(), 1);
+    assert.equal(log.mock.calls[0].arguments.at(-1), error);
+});
+
+test('obsolete summary reads cannot update detached rows or closed modals', async t => {
+    const f = setup(t);
+    const pending = [];
+    f.shadowNoteService.getFileSummaryFromNote = () => new Promise(resolve => pending.push(resolve));
+    const modal = f.open();
+    const first = rowFor(modal, 'Report.pdf');
+    f.app.metadataCache.emit('resolved');
+    const second = rowFor(modal, 'Report.pdf');
+    pending[1]('Latest');
+    await settle();
+    pending[0]('Obsolete');
+    await settle();
+    assert.equal(findAll(first, 'file-pilot-file-summary').length, 0);
+    assert.equal(findAll(second, 'file-pilot-file-summary')[0].text, 'Latest');
+    f.app.metadataCache.emit('resolved');
+    const third = rowFor(modal, 'Report.pdf');
+    modal.close();
+    pending[2]('After close');
+    await settle();
+    assert.equal(findAll(third, 'file-pilot-file-summary').length, 0);
+});
+
+test('only FileRecords representing folders receive the underline class', t => {
+    const f = setup(t);
+    const folder = new TFile('ShadowNotes/Documents.md');
+    const extensionless = new TFile('ShadowNotes/LICENSE.md');
+    f.records.push(
+        { kind: 'folder', shadowNotePath: folder.path },
+        { kind: 'file', shadowNotePath: extensionless.path },
+        { kind: 'file', shadowNotePath: f.managed.path },
+    );
+    f.connections.incoming.push(connection(folder, true), connection(extensionless, true));
+    const modal = f.open();
+    assert.equal(findAll(rowFor(modal, 'Documents'), 'file-pilot-folder-name').length, 1);
+    for (const label of ['LICENSE', 'Report.pdf', 'Ordinary.md']) {
+        assert.equal(findAll(rowFor(modal, label), 'file-pilot-folder-name').length, 0);
+    }
+});
+
+test('fixed node overview is outside the scroll container and headings have directional icons', t => {
+    const f = setup(t);
+    f.connections.outgoing.length = 0;
+    const modal = f.open();
+    const scroll = modal.contentEl.querySelector('.file-pilot-graph-connections');
+    const current = modal.contentEl.querySelector('.file-pilot-graph-current-node');
+    assert.equal(current.parent, modal.contentEl);
+    assert.equal(scroll.parent, modal.contentEl);
+    assert.equal(modal.titleEl.parent, modal.modalEl);
+    for (const [direction, icon] of [['incoming', 'arrow-down-left'], ['outgoing', 'arrow-up-right']]) {
+        const section = scroll.querySelector('.file-pilot-graph-section-' + direction);
+        assert.equal(section.parent, scroll);
+        assert.equal(section.querySelector('.file-pilot-graph-section-icon').icon, icon);
+    }
+    const outgoing = scroll.querySelector('.file-pilot-graph-section-outgoing');
+    assert.equal(outgoing.querySelector('.file-pilot-graph-empty-state').text, en.graphNoConnections);
+});
+
+test('scroll position survives metadata refresh and connection updates', async t => {
+    const f = setup(t);
+    const modal = f.open();
+    const scroll = () => modal.contentEl.querySelector('.file-pilot-graph-connections');
+    scroll().scrollTop = 125;
+    f.app.metadataCache.emit('resolved');
+    assert.equal(scroll().scrollTop, 125);
+    removeButton(rowFor(modal, 'Report.pdf')).click();
+    assert.equal(scroll().scrollTop, 125);
+    await settle();
+    assert.equal(scroll().scrollTop, 125);
+});
+
+function pointer(handle, type, x, y, button = 0, pointerId = 1) {
+    handle.dispatch(type, { clientX: x, clientY: y, button, pointerId });
+}
+
+function position(modal) {
+    return ['x', 'y'].map(axis => modal.modalEl.style.getPropertyValue('--file-pilot-modal-' + axis));
+}
+
+test('dragging ignores other buttons and pointers, stops on release or cancellation, and retains offsets', t => {
+    const f = setup(t);
+    const modal = f.open();
+    const handle = modal.titleEl;
+    pointer(handle, 'pointerdown', 10, 20, 2);
+    pointer(handle, 'pointermove', 30, 50);
+    assert.deepEqual(position(modal), ['', '']);
+    pointer(handle, 'pointerdown', 10, 20);
+    assert.ok(handle.hasPointerCapture(1));
+    pointer(handle, 'pointermove', 500, 500, 0, 2);
+    assert.deepEqual(position(modal), ['', '']);
+    pointer(handle, 'pointermove', 30, 50);
+    assert.deepEqual(position(modal), ['20px', '30px']);
+    pointer(handle, 'pointerup', 30, 50);
+    pointer(handle, 'pointermove', 90, 90);
+    assert.deepEqual(position(modal), ['20px', '30px']);
+    pointer(handle, 'pointerdown', 30, 50);
+    pointer(handle, 'pointermove', 40, 60);
+    assert.deepEqual(position(modal), ['30px', '40px']);
+    pointer(handle, 'pointercancel', 40, 60);
+    pointer(handle, 'pointermove', 100, 100);
+    assert.deepEqual(position(modal), ['30px', '40px']);
+    pointer(handle, 'pointerdown', 40, 60);
+    pointer(handle, 'lostpointercapture', 40, 60);
+    pointer(handle, 'pointermove', 100, 100);
+    assert.deepEqual(position(modal), ['30px', '40px']);
+});
+
+test('parent and suggestion dragging are independent and close releases drag resources', t => {
+    const f = setup(t);
+    const modal = f.open();
+    const child = suggest(f, modal, 'incoming');
+    const handle = child.modalEl.querySelector('.file-pilot-graph-suggest-drag-handle');
+    pointer(modal.titleEl, 'pointerdown', 0, 0);
+    pointer(modal.titleEl, 'pointermove', 20, 30);
+    pointer(handle, 'pointerdown', 0, 0);
+    pointer(handle, 'pointermove', -10, 15);
+    assert.deepEqual(position(modal), ['20px', '30px']);
+    assert.deepEqual(position(child), ['-10px', '15px']);
+    child.close();
+    assert.equal(handle.hasPointerCapture(1), false);
+    assert.equal(handle.isConnected, false);
+    assert.deepEqual(position(child), ['', '']);
+    assert.ok(!child.modalEl.classes.has('file-pilot-graph-modal'));
+    assert.ok(!handle.classes.has('file-pilot-graph-modal-title'));
+    assert.ok([...handle.listeners.values()].every(list => list.length === 0));
+    assert.deepEqual(position(modal), ['20px', '30px']);
+    modal.close();
+    assert.equal(modal.titleEl.hasPointerCapture(1), false);
+    assert.deepEqual(position(modal), ['', '']);
+    assert.ok(!modal.modalEl.classes.has('file-pilot-graph-modal'));
+    assert.ok(!modal.titleEl.classes.has('file-pilot-graph-modal-title'));
+    assert.ok([...modal.titleEl.listeners.values()].every(list => list.length === 0));
 });

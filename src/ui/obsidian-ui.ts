@@ -13,6 +13,7 @@ import { notifyFileActionError } from './file-action-error-notifier';
 import { t } from '../i18n';
 import type { FileGraphService } from '../core/file-graph-service';
 import { FileGraphRelationModal } from './file-graph-relation-modal';
+import type { ShadowNoteService } from '../core/shadow-note-service';
 const HIDE_CLASS = 'file-pilot-hide-shadow-notes';
 
 export function setShadowNotesHidden(hidden: boolean): void {
@@ -85,6 +86,8 @@ export function registerFileGraphMenu(
 export function registerGraphRelationMenu(
 	app: App,
 	fileGraphService: FileGraphService,
+	shadowNoteService: ShadowNoteService,
+	stateService: PluginStateService,
 ): () => void {
 	const activeModals = new Set<FileGraphRelationModal>();
 
@@ -105,6 +108,8 @@ export function registerGraphRelationMenu(
 						app,
 						file,
 						fileGraphService,
+						shadowNoteService,
+						stateService,
 						() => {
 							activeModals.delete(modal);
 						},

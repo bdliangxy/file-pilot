@@ -149,5 +149,5 @@ export const zh = {
 	graphNoConnections: '暂无连接',
 	graphSelectNote: '搜索引用节点...',
 	graphOrdinaryLinkTooltip:
-		'该文件或笔记可能在正文中，请在笔记内处理。',
+		'该文件或笔记的引用可能在正文中，请在笔记内处理。',
 } satisfies Record<keyof typeof en, string>;

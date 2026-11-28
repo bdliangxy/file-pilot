@@ -92,6 +92,16 @@ export class ShadowNoteService {
 		if (!note) {
 			return null;
 		}
+
+		return this.getFileSummaryFromNote(note);
+	}
+
+	/**
+	 * Read the File Summary directly from a Shadow Note.
+	 */
+	async getFileSummaryFromNote(
+		note: TFile,
+	): Promise<string | null> {
 		const content = await this.app.vault.cachedRead(note);
 
 		return extractFirstParagraphFromHeading(
