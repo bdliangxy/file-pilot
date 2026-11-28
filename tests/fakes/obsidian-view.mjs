@@ -99,9 +99,62 @@ export class FakeElement {
     setText(text) { this.text = text; }
 }
 
+// Minimal modal lifecycle and suggestion selection for UI tests.
+export class Modal {
+    constructor(app) {
+        this.app = app;
+        this.contentEl = new FakeElement();
+        this.isOpen = false;
+    }
+
+    setTitle(title) {
+        this.title = title;
+        return this;
+    }
+
+    open() {
+        if (this.isOpen) return;
+        this.isOpen = true;
+        this.app.openModals ??= new Set();
+        this.app.openModals.add(this);
+        this.onOpen();
+    }
+
+    close() {
+        if (!this.isOpen) return;
+        this.isOpen = false;
+        this.app.openModals.delete(this);
+        this.onClose();
+    }
+
+    onOpen() {}
+    onClose() {}
+}
+
+export class FuzzySuggestModal extends Modal {
+    setPlaceholder(placeholder) {
+        this.placeholder = placeholder;
+    }
+
+    chooseItem(item) {
+        if (!this.isOpen) return;
+        this.close();
+        this.onChooseItem(item);
+    }
+
+    onClose() {
+        this.contentEl.empty();
+    }
+}
+
+export function setTooltip(element, text, options) {
+    element.tooltip = { text, options };
+}
+
 export class Setting {
     constructor(parent) {
         this.element = parent.createDiv({ cls: 'setting-item' });
+        this.settingEl = this.element;
         this.infoEl = this.element.createDiv({ cls: 'setting-item-info' });
         this.nameEl = this.infoEl.createDiv({ cls: 'setting-item-name' });
         this.descEl = this.infoEl.createDiv({ cls: 'setting-item-description' });
@@ -117,6 +170,28 @@ export class Setting {
     setDesc(text) {
         this.description = text;
         this.descEl.setText(text);
+        return this;
+    }
+
+    setClass(cls) {
+        for (const name of cls.split(/\s+/).filter(Boolean)) {
+            this.settingEl.addClass(name);
+        }
+        return this;
+    }
+
+    setHeading() {
+        return this.setClass('setting-item-heading');
+    }
+
+    addExtraButton(callback) {
+        const element = this.controlEl.createDiv({ cls: 'clickable-icon extra-setting-button' });
+        callback({
+            setIcon(icon) { setIcon(element, icon); return this; },
+            setTooltip(text) { setTooltip(element, text); return this; },
+            setDisabled(disabled) { element.disabled = disabled; return this; },
+            onClick(handler) { element.addEventListener('click', handler); return this; },
+        });
         return this;
     }
 

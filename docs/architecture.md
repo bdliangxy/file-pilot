@@ -46,9 +46,14 @@ flowchart TD
 ```mermaid
 flowchart TD
     Main["FilePilotPlugin"] -->|"Initialize graph service"| Graph["FileGraphService"]
+    Main -->|"Register relation editor"| Modal["FileGraphRelationModal"]
+
+    Modal -->|"Query and edit connections"| Graph
+    Modal -->|"Show graph feedback"| GraphUtils["FileGraphUtils"]
+
     View["FilePilotView"] -->|"Build shared tree and update Portal Note"| Portal["PortalNoteService"]
     View -->|"Synchronize graph links"| Graph
-    View -->|"Show graph feedback"| GraphUtils["FileGraphUtils"]
+    View -->|"Show graph feedback"| GraphUtils
 
     Portal -->|"Build PortalTreeNode"| PortalTree["PortalTreeUtils"]
     Graph -->|"Read settings and clearing state"| State["PluginStateService"]

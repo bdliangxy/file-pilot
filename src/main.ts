@@ -11,7 +11,11 @@ import { FileSyncService } from './core/file-sync';
 import { FileActionService } from './core/file-action-service';
 import type { SyncResult } from './core/file-sync';
 import { ShadowNoteWatcher } from './core/shadow-note-watcher';
-import { setShadowNotesHidden, registerFileGraphMenu, } from './ui/obsidian-ui';
+import {
+	setShadowNotesHidden,
+	registerFileGraphMenu,
+	registerGraphRelationMenu,
+} from './ui/obsidian-ui';
 import { FilePilotError } from './error';
 import type { FileRecord } from './core/file-interface';
 import type { FileItemOpenAction } from './utils/file-item-gestures';
@@ -160,14 +164,20 @@ export default class FilePilotPlugin extends Plugin {
 
 		this.registerEditorSuggest(fileReferenceSuggest);
 
+		// Register file actions for managed Shadow Notes.
 		this.registerEvent(registerFileGraphMenu(
 			this.app.workspace,
 			this.stateService,
 			this.fileActionService,
 		));
 
-		// Register the file reference insertion command.
+		// Register graph relation editing for all Markdown notes.
+		this.register(registerGraphRelationMenu(
+			this.app,
+			this.fileGraphService,
+		));
 
+		// Register the file reference insertion command.
 		this.addCommand({
 			id: "insert-file-reference",
 			name: t('insertFileReferenceCommand'),

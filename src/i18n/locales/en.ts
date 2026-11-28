@@ -141,4 +141,15 @@ export const en = {
 	fileGraphSelfLink: 'A node cannot link to itself',
 	fileGraphNoteNotFound: 'A connected note no longer exists',
 	fileGraphInvalidNoteType: 'file-pilot-links must connect Markdown notes',
+	// Graph relation editor
+	graphEditRelations: 'Edit graph relations',
+	graphCurrentNode: 'Current node',
+	graphIncomingLinks: 'Incoming links',
+	graphOutgoingLinks: 'Outgoing links',
+	graphAddConnection: 'Add',
+	graphRemoveConnection: 'Remove connection',
+	graphNoConnections: 'No connections',
+	graphSelectNote: 'Search reference nodes...',
+	graphOrdinaryLinkTooltip:
+		'The reference may be in the note body. Please edit it in the note manually.',
 } as const;

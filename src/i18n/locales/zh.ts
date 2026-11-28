@@ -139,4 +139,15 @@ export const zh = {
 	fileGraphSelfLink: '节点不能引用自身',
 	fileGraphNoteNotFound: '连接涉及的笔记已不存在',
 	fileGraphInvalidNoteType: 'file-pilot-links只能在Markdown 笔记间建立联接',
+	// Graph relation editor
+	graphEditRelations: '编辑图谱关系',
+	graphCurrentNode: '当前节点',
+	graphIncomingLinks: '入链',
+	graphOutgoingLinks: '出链',
+	graphAddConnection: '添加',
+	graphRemoveConnection: '移除连接',
+	graphNoConnections: '暂无连接',
+	graphSelectNote: '搜索引用节点...',
+	graphOrdinaryLinkTooltip:
+		'该文件或笔记可能在正文中，请在笔记内处理。',
 } satisfies Record<keyof typeof en, string>;

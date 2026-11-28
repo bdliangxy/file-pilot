@@ -18,6 +18,15 @@ export class TFile {
     constructor(path) {
         this.path = path;
     }
+
+    get name() { return this.path.split('/').at(-1); }
+    get extension() {
+        const index = this.name.lastIndexOf('.');
+        return index > 0 ? this.name.slice(index + 1) : '';
+    }
+    get basename() {
+        return this.extension ? this.name.slice(0, -this.extension.length - 1) : this.name;
+    }
 }
 export class TFolder {
     constructor(path) {

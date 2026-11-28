@@ -711,3 +711,24 @@ body.file-pilot-hide-shadow-notes .workspace-leaf-content[data-type="file-explor
 	font-size: var(--font-smallest);
 	color: var(--text-warning);
 }
+
+/* Graph connection rows. */
+.modal-content .setting-item.file-pilot-graph-connection {
+	min-width: 0;
+	padding: 10px 6px !important;
+	margin-block: 0;
+	border-radius: var(--radius-s) !important;
+	transition: background-color 100ms ease;
+}
+
+/* Highlight read-only connections. */
+.modal-content .setting-item.file-pilot-graph-connection:hover {
+	background-color: var(--background-modifier-hover) !important;
+}
+
+/* Highlight editable connections. */
+.modal-content .setting-item.file-pilot-graph-connection.file-pilot-graph-connection-editable:hover {
+	background-color: color-mix(in srgb,
+			var(--interactive-accent) 16%,
+			var(--background-modifier-hover)) !important;
+}

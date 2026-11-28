@@ -1,5 +1,8 @@
 export { getLanguage } from './obsidian.mjs';
-export { Notice, Setting, setIcon, ItemView, WorkspaceLeaf } from './obsidian-view.mjs';
+export {
+    Notice, Setting, setIcon, ItemView, WorkspaceLeaf,
+    Modal, FuzzySuggestModal, setTooltip,
+} from './obsidian-view.mjs';
 export {
     PluginSettingTab,
     ButtonComponent,
